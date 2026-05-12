@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onBeforeUnmount, watch } from 'vue'
+
 defineProps<{
   title?: string
 }>()
@@ -13,8 +15,6 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') model.value = false
 }
 
-import { watch } from 'vue'
-
 watch(model, (open) => {
   if (open) {
     document.addEventListener('keydown', onKeydown)
@@ -23,6 +23,13 @@ watch(model, (open) => {
     document.removeEventListener('keydown', onKeydown)
     document.body.style.overflow = ''
   }
+})
+
+// Belt-and-suspenders: if the host unmounts while the modal is open, make sure
+// we don't leak the listener or leave the body scroll-locked.
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -47,10 +54,12 @@ watch(model, (open) => {
           <div v-if="title" class="flex items-center justify-between px-6 pt-5 pb-0">
             <h2 class="text-lg font-semibold text-fg">{{ title }}</h2>
             <button
+              type="button"
+              aria-label="Close dialog"
               class="rounded-md p-1.5 text-muted-fg hover:text-fg hover:bg-muted transition-colors"
               @click="model = false"
             >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>

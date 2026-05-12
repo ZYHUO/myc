@@ -1,3 +1,6 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface ApiKey {
   id: string
   name: string
@@ -57,39 +60,51 @@ const MOCK_KEYS: ApiKey[] = [
 ]
 
 export async function getKeys(): Promise<ApiKey[]> {
-  await delay()
-  return [...MOCK_KEYS]
+  if (isMockMode()) {
+    await delay()
+    return [...MOCK_KEYS]
+  }
+  const res = await client.get<ApiKey[]>('/keys')
+  return res.data
 }
 
 export async function createKey(data: Partial<ApiKey>): Promise<ApiKey> {
-  await delay()
-  const newKey: ApiKey = {
-    id: `key_${Date.now()}`,
-    name: data.name || '新密钥',
-    key: `sk-new-${Math.random().toString(36).slice(2)}`,
-    group: data.group || 'default',
-    status: 'active',
-    requests: 0,
-    createdAt: new Date().toISOString(),
+  if (isMockMode()) {
+    await delay()
+    const newKey: ApiKey = {
+      id: `key_${Date.now()}`,
+      name: data.name || '新密钥',
+      key: `sk-new-${Math.random().toString(36).slice(2)}`,
+      group: data.group || 'default',
+      status: 'active',
+      requests: 0,
+      createdAt: new Date().toISOString(),
+    }
+    MOCK_KEYS.push(newKey)
+    return newKey
   }
-  MOCK_KEYS.push(newKey)
-  return newKey
+  const res = await client.post<ApiKey>('/keys', data)
+  return res.data
 }
 
 export async function updateKey(id: string, data: Partial<ApiKey>): Promise<ApiKey> {
-  await delay()
-  const idx = MOCK_KEYS.findIndex((k) => k.id === id)
-  if (idx === -1) throw new Error('Key not found')
-  Object.assign(MOCK_KEYS[idx], data)
-  return { ...MOCK_KEYS[idx] }
+  if (isMockMode()) {
+    await delay()
+    const idx = MOCK_KEYS.findIndex((k) => k.id === id)
+    if (idx === -1) throw new Error('Key not found')
+    Object.assign(MOCK_KEYS[idx], data)
+    return { ...MOCK_KEYS[idx] }
+  }
+  const res = await client.patch<ApiKey>(`/keys/${id}`, data)
+  return res.data
 }
 
 export async function deleteKey(id: string): Promise<void> {
-  await delay()
-  const idx = MOCK_KEYS.findIndex((k) => k.id === id)
-  if (idx !== -1) MOCK_KEYS.splice(idx, 1)
-}
-
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+  if (isMockMode()) {
+    await delay()
+    const idx = MOCK_KEYS.findIndex((k) => k.id === id)
+    if (idx !== -1) MOCK_KEYS.splice(idx, 1)
+    return
+  }
+  await client.delete(`/keys/${id}`)
 }

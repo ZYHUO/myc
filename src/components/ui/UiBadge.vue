@@ -1,7 +1,9 @@
 <script setup lang="ts">
+export type BadgeVariant = 'green' | 'amber' | 'red' | 'gray'
+
 withDefaults(
   defineProps<{
-    variant?: 'green' | 'amber' | 'red' | 'gray'
+    variant?: BadgeVariant
   }>(),
   {
     variant: 'gray',

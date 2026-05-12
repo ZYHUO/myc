@@ -16,7 +16,7 @@ const clamped = computed(() => Math.max(0, Math.min(100, props.value)))
 <template>
   <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
     <div
-      class="h-full rounded-full bg-primary transition-all duration-0.15s"
+      class="h-full rounded-full bg-primary transition-all duration-150"
       :style="{ width: `${clamped}%` }"
     />
   </div>

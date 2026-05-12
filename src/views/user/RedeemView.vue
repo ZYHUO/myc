@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { UiInput, UiButton, UiBadge, UiTable } from '@/components/ui'
+import type { BadgeVariant } from '@/components/ui'
+import { useToast } from '@/composables'
 import { redeemCode, getRedeemHistory, type RedeemHistory } from '@/api/redeem'
 
 const code = ref('')
 const redeeming = ref(false)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
+const toast = useToast()
 
 const history = ref<RedeemHistory[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
-  history.value = await getRedeemHistory()
-  loading.value = false
+  try {
+    history.value = await getRedeemHistory()
+  } catch {
+    toast.error('Failed to load redemption history')
+  } finally {
+    loading.value = false
+  }
 })
 
 async function handleRedeem() {
@@ -28,6 +36,8 @@ async function handleRedeem() {
     } else {
       message.value = { type: 'error', text: res.message }
     }
+  } catch {
+    message.value = { type: 'error', text: 'Redemption failed — please try again' }
   } finally {
     redeeming.value = false
   }
@@ -45,7 +55,7 @@ function formatDate(iso: string): string {
   })
 }
 
-function statusVariant(status: string) {
+function statusVariant(status: RedeemHistory['status']): BadgeVariant {
   if (status === 'success') return 'green'
   if (status === 'expired') return 'gray'
   return 'red'
@@ -101,7 +111,7 @@ function statusVariant(status: string) {
             <td class="px-4 py-3 text-sm">{{ item.reward }}</td>
             <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(item.date) }}</td>
             <td class="px-4 py-3">
-              <UiBadge :variant="statusVariant(item.status) as any">{{ item.status }}</UiBadge>
+              <UiBadge :variant="statusVariant(item.status)">{{ item.status }}</UiBadge>
             </td>
           </tr>
         </tbody>

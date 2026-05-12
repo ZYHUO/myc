@@ -1,6 +1,7 @@
 export { default as UiButton } from './UiButton.vue'
 export { default as UiCard } from './UiCard.vue'
 export { default as UiBadge } from './UiBadge.vue'
+export type { BadgeVariant } from './UiBadge.vue'
 export { default as UiInput } from './UiInput.vue'
 export { default as UiStatusDot } from './UiStatusDot.vue'
 export { default as UiCopyButton } from './UiCopyButton.vue'

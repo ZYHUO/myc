@@ -1,3 +1,6 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface AffiliateStats {
   totalReferrals: number
   availableRebate: number
@@ -26,20 +29,28 @@ const MOCK_ACTIVITY: AffiliateActivity[] = [
 ]
 
 export async function getAffiliateStats(): Promise<AffiliateStats> {
-  await delay()
-  return { ...MOCK_STATS }
+  if (isMockMode()) {
+    await delay()
+    return { ...MOCK_STATS }
+  }
+  const res = await client.get<AffiliateStats>('/affiliate/stats')
+  return res.data
 }
 
 export async function getAffiliateActivity(): Promise<AffiliateActivity[]> {
-  await delay()
-  return MOCK_ACTIVITY.map((a) => ({ ...a }))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_ACTIVITY.map((a) => ({ ...a }))
+  }
+  const res = await client.get<AffiliateActivity[]>('/affiliate/activity')
+  return res.data
 }
 
 export async function getReferralLink(): Promise<string> {
-  await delay()
-  return 'https://sub2api.com/invite/zhongyang_abc123'
-}
-
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+  if (isMockMode()) {
+    await delay()
+    return 'https://sub2api.com/invite/zhongyang_abc123'
+  }
+  const res = await client.get<{ url: string }>('/affiliate/referral-link')
+  return res.data.url
 }

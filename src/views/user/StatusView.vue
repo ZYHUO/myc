@@ -10,9 +10,14 @@ const lastRefresh = ref<Date>(new Date())
 const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
 
 async function fetchMonitors() {
-  monitors.value = await getChannelMonitors()
-  lastRefresh.value = new Date()
-  loading.value = false
+  try {
+    monitors.value = await getChannelMonitors()
+    lastRefresh.value = new Date()
+  } catch {
+    // Silent: keep prior data, refresh will retry on next interval.
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => {

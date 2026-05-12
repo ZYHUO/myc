@@ -1,8 +1,17 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface RedeemHistory {
   code: string
   reward: string
   date: string
   status: 'success' | 'expired' | 'invalid'
+}
+
+export interface RedeemResult {
+  success: boolean
+  message: string
+  reward?: string
 }
 
 const MOCK_HISTORY: RedeemHistory[] = [
@@ -32,22 +41,26 @@ const MOCK_HISTORY: RedeemHistory[] = [
   },
 ]
 
-export async function redeemCode(code: string): Promise<{ success: boolean; message: string; reward?: string }> {
-  await delay(500)
-  if (code === 'EXPIRED-OLD-CODE') {
-    return { success: false, message: '兑换码已过期' }
+export async function redeemCode(code: string): Promise<RedeemResult> {
+  if (isMockMode()) {
+    await delay(500)
+    if (code === 'EXPIRED-OLD-CODE') {
+      return { success: false, message: '兑换码已过期' }
+    }
+    if (code === 'BAD-CODE-XXXX' || code.length < 8) {
+      return { success: false, message: '无效的兑换码' }
+    }
+    return { success: true, message: '兑换成功！', reward: '余额 ¥10.00' }
   }
-  if (code === 'BAD-CODE-XXXX' || code.length < 8) {
-    return { success: false, message: '无效的兑换码' }
-  }
-  return { success: true, message: '兑换成功！', reward: '余额 ¥10.00' }
+  const res = await client.post<RedeemResult>('/redeem', { code })
+  return res.data
 }
 
 export async function getRedeemHistory(): Promise<RedeemHistory[]> {
-  await delay()
-  return MOCK_HISTORY.map((h) => ({ ...h }))
-}
-
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_HISTORY.map((h) => ({ ...h }))
+  }
+  const res = await client.get<RedeemHistory[]>('/redeem/history')
+  return res.data
 }

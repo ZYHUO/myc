@@ -13,15 +13,20 @@ const toast = useToast()
 const { confirm } = useConfirm()
 
 onMounted(async () => {
-  const [s, a, l] = await Promise.all([
-    getAffiliateStats(),
-    getAffiliateActivity(),
-    getReferralLink(),
-  ])
-  stats.value = s
-  activity.value = a
-  referralLink.value = l
-  loading.value = false
+  try {
+    const [s, a, l] = await Promise.all([
+      getAffiliateStats(),
+      getAffiliateActivity(),
+      getReferralLink(),
+    ])
+    stats.value = s
+    activity.value = a
+    referralLink.value = l
+  } catch {
+    toast.error('Failed to load affiliate data')
+  } finally {
+    loading.value = false
+  }
 })
 
 async function handleTransfer() {

@@ -13,7 +13,7 @@ withDefaults(
 
 <template>
   <button
-    class="inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm transition-all duration-0.15s active:translate-y-px"
+    class="inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm transition-all duration-150 active:translate-y-px"
     :class="{
       'bg-fg text-bg hover:opacity-90': variant === 'primary',
       'border border-border text-fg hover:bg-muted': variant === 'secondary',

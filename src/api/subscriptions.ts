@@ -1,3 +1,6 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface Subscription {
   id: string
   name: string
@@ -43,15 +46,19 @@ const MOCK_SUBSCRIPTIONS: Subscription[] = [
 ]
 
 export async function getSubscriptions(): Promise<Subscription[]> {
-  await delay()
-  return MOCK_SUBSCRIPTIONS.map((s) => ({ ...s }))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_SUBSCRIPTIONS.map((s) => ({ ...s }))
+  }
+  const res = await client.get<Subscription[]>('/subscriptions')
+  return res.data
 }
 
 export async function getActiveSubscriptions(): Promise<Subscription[]> {
-  await delay()
-  return MOCK_SUBSCRIPTIONS.filter((s) => s.status === 'active').map((s) => ({ ...s }))
-}
-
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_SUBSCRIPTIONS.filter((s) => s.status === 'active').map((s) => ({ ...s }))
+  }
+  const res = await client.get<Subscription[]>('/subscriptions/active')
+  return res.data
 }

@@ -1,3 +1,6 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface UsageLog {
   id: string
   time: string
@@ -15,6 +18,14 @@ export interface UsageStats {
   totalTokens: number
   totalCost: number
   avgDuration: number
+}
+
+export interface UsageLogQuery {
+  page?: number
+  pageSize?: number
+  model?: string
+  dateFrom?: string
+  dateTo?: string
 }
 
 const MODELS = [
@@ -62,38 +73,36 @@ const MOCK_STATS: UsageStats = {
   avgDuration: 1240,
 }
 
-export async function getUsageLogs(params?: {
-  page?: number
-  pageSize?: number
-  model?: string
-  dateFrom?: string
-  dateTo?: string
-}): Promise<{ data: UsageLog[]; total: number }> {
-  await delay()
-  let logs = [...MOCK_LOGS]
-  if (params?.model) {
-    logs = logs.filter((l) => l.model === params.model)
+export async function getUsageLogs(params?: UsageLogQuery): Promise<{ data: UsageLog[]; total: number }> {
+  if (isMockMode()) {
+    await delay()
+    let logs = [...MOCK_LOGS]
+    if (params?.model) {
+      logs = logs.filter((l) => l.model === params.model)
+    }
+    if (params?.dateFrom) {
+      logs = logs.filter((l) => new Date(l.time) >= new Date(params.dateFrom!))
+    }
+    if (params?.dateTo) {
+      const to = new Date(params.dateTo!)
+      to.setHours(23, 59, 59, 999)
+      logs = logs.filter((l) => new Date(l.time) <= to)
+    }
+    const total = logs.length
+    const page = params?.page || 1
+    const size = params?.pageSize || 20
+    const start = (page - 1) * size
+    return { data: logs.slice(start, start + size), total }
   }
-  if (params?.dateFrom) {
-    logs = logs.filter((l) => new Date(l.time) >= new Date(params.dateFrom!))
-  }
-  if (params?.dateTo) {
-    const to = new Date(params.dateTo!)
-    to.setHours(23, 59, 59, 999)
-    logs = logs.filter((l) => new Date(l.time) <= to)
-  }
-  const total = logs.length
-  const page = params?.page || 1
-  const size = params?.pageSize || 20
-  const start = (page - 1) * size
-  return { data: logs.slice(start, start + size), total }
+  const res = await client.get<{ data: UsageLog[]; total: number }>('/usage/logs', { params })
+  return res.data
 }
 
 export async function getUsageStats(): Promise<UsageStats> {
-  await delay()
-  return { ...MOCK_STATS }
-}
-
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+  if (isMockMode()) {
+    await delay()
+    return { ...MOCK_STATS }
+  }
+  const res = await client.get<UsageStats>('/usage/stats')
+  return res.data
 }

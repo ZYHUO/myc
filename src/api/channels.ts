@@ -1,3 +1,6 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface Channel {
   id: string
   name: string
@@ -79,15 +82,19 @@ const MOCK_MONITORS: ChannelMonitor[] = MOCK_CHANNELS.map((ch) => ({
 }))
 
 export async function getChannels(): Promise<Channel[]> {
-  await delay()
-  return MOCK_CHANNELS.map((c) => ({ ...c }))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_CHANNELS.map((c) => ({ ...c }))
+  }
+  const res = await client.get<Channel[]>('/channels')
+  return res.data
 }
 
 export async function getChannelMonitors(): Promise<ChannelMonitor[]> {
-  await delay()
-  return MOCK_MONITORS.map((m) => ({ ...m, uptimeHistory: [...m.uptimeHistory] }))
-}
-
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_MONITORS.map((m) => ({ ...m, uptimeHistory: [...m.uptimeHistory] }))
+  }
+  const res = await client.get<ChannelMonitor[]>('/channels/monitors')
+  return res.data
 }

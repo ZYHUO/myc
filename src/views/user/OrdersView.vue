@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { UiTable, UiBadge, UiButton } from '@/components/ui'
+import type { BadgeVariant } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
-import { getOrders, type Order } from '@/api/orders'
+import { getOrders, refundOrder, type Order } from '@/api/orders'
 
 const orders = ref<Order[]>([])
 const loading = ref(true)
@@ -10,8 +11,13 @@ const toast = useToast()
 const { confirm } = useConfirm()
 
 onMounted(async () => {
-  orders.value = await getOrders()
-  loading.value = false
+  try {
+    orders.value = await getOrders()
+  } catch {
+    toast.error('Failed to load orders')
+  } finally {
+    loading.value = false
+  }
 })
 
 async function handleRefund(order: Order) {
@@ -21,8 +27,14 @@ async function handleRefund(order: Order) {
     variant: 'danger',
   })
   if (!confirmed) return
-  order.status = 'refunded'
-  toast.success('Refund request submitted successfully')
+  try {
+    const updated = await refundOrder(order.id)
+    const idx = orders.value.findIndex((o) => o.id === order.id)
+    if (idx !== -1) orders.value[idx] = updated
+    toast.success('Refund request submitted successfully')
+  } catch {
+    toast.error('Refund request failed')
+  }
 }
 
 function formatDate(iso: string): string {
@@ -35,7 +47,7 @@ function formatDate(iso: string): string {
   })
 }
 
-function statusVariant(status: string) {
+function statusVariant(status: Order['status']): BadgeVariant {
   if (status === 'completed') return 'green'
   if (status === 'pending') return 'amber'
   if (status === 'refunded') return 'gray'
@@ -94,7 +106,7 @@ function formatMethod(method: string) {
           <td class="px-4 py-3 text-sm">{{ formatType(order.type) }}</td>
           <td class="px-4 py-3 font-mono text-sm tabular-nums">¥{{ order.amount.toFixed(2) }}</td>
           <td class="px-4 py-3">
-            <UiBadge :variant="statusVariant(order.status) as any">{{ order.status }}</UiBadge>
+            <UiBadge :variant="statusVariant(order.status)">{{ order.status }}</UiBadge>
           </td>
           <td class="px-4 py-3 text-sm">{{ formatMethod(order.paymentMethod) }}</td>
           <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(order.createdAt) }}</td>

@@ -37,16 +37,19 @@ const filteredLogs = computed(() => {
 
 async function fetchData() {
   loading.value = true
-  const result = await getUsageLogs({
-    page: page.value,
-    pageSize,
-    model: modelFilter.value || undefined,
-    dateFrom: dateFrom.value || undefined,
-    dateTo: dateTo.value || undefined,
-  })
-  logs.value = result.data
-  total.value = result.total
-  loading.value = false
+  try {
+    const result = await getUsageLogs({
+      page: page.value,
+      pageSize,
+      model: modelFilter.value || undefined,
+      dateFrom: dateFrom.value || undefined,
+      dateTo: dateTo.value || undefined,
+    })
+    logs.value = result.data
+    total.value = result.total
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(async () => {

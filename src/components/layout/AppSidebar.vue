@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-sidebar-bg border-r border-sidebar-border transition-transform duration-0.15s lg:static lg:translate-x-0"
+    class="fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-sidebar-bg border-r border-sidebar-border transition-transform duration-150 lg:static lg:translate-x-0"
     :class="open ? 'translate-x-0' : '-translate-x-full'"
   >
     <!-- Logo -->
@@ -54,7 +54,7 @@ const navItems: NavItem[] = [
         v-for="item in navItems"
         :key="item.to"
         :to="item.to"
-        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-fg transition-colors duration-0.15s hover:text-fg"
+        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-fg transition-colors duration-150 hover:text-fg"
         :class="{
           'bg-sidebar-accent text-sidebar-accent-fg font-medium': route.path === item.to,
         }"

@@ -8,8 +8,11 @@ const channels = ref<Channel[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
-  channels.value = await getChannels()
-  loading.value = false
+  try {
+    channels.value = await getChannels()
+  } finally {
+    loading.value = false
+  }
 })
 
 function statusToDot(s: Channel['status']): 'online' | 'degraded' | 'offline' {

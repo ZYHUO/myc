@@ -21,7 +21,9 @@ const pageTitle = computed(() => {
     <!-- Left -->
     <div class="flex items-center gap-4">
       <button
-        class="flex h-9 w-9 items-center justify-center rounded-md text-muted-fg transition-colors duration-0.15s hover:text-fg lg:hidden"
+        type="button"
+        aria-label="Toggle navigation"
+        class="flex h-9 w-9 items-center justify-center rounded-md text-muted-fg transition-colors duration-150 hover:text-fg lg:hidden"
         @click="emit('toggle-sidebar')"
       >
         <svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -33,7 +35,9 @@ const pageTitle = computed(() => {
 
     <!-- Right -->
     <button
-      class="flex h-9 w-9 items-center justify-center rounded-md text-muted-fg transition-colors duration-0.15s hover:text-fg"
+      type="button"
+      aria-label="Toggle theme"
+      class="flex h-9 w-9 items-center justify-center rounded-md text-muted-fg transition-colors duration-150 hover:text-fg"
       @click="emit('toggle-theme')"
     >
       <!-- Sun icon -->

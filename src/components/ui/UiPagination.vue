@@ -55,11 +55,13 @@ function goTo(page: number) {
 
     <div class="flex items-center gap-1">
       <button
-        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-0.15s hover:bg-muted disabled:opacity-40"
+        type="button"
+        aria-label="Previous page"
+        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 hover:bg-muted disabled:opacity-40"
         :disabled="current <= 1"
         @click="goTo(current - 1)"
       >
-        <svg class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <svg class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
         </svg>
       </button>
@@ -67,7 +69,10 @@ function goTo(page: number) {
       <button
         v-for="page in pages"
         :key="page"
-        class="flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm transition-colors duration-0.15s"
+        type="button"
+        :aria-label="`Go to page ${page}`"
+        :aria-current="page === current ? 'page' : undefined"
+        class="flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm transition-colors duration-150"
         :class="page === current ? 'bg-fg text-bg font-medium' : 'hover:bg-muted'"
         @click="goTo(page)"
       >
@@ -75,11 +80,13 @@ function goTo(page: number) {
       </button>
 
       <button
-        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-0.15s hover:bg-muted disabled:opacity-40"
+        type="button"
+        aria-label="Next page"
+        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 hover:bg-muted disabled:opacity-40"
         :disabled="current >= totalPages"
         @click="goTo(current + 1)"
       >
-        <svg class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <svg class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
         </svg>
       </button>

@@ -1,3 +1,6 @@
+import client from './client'
+import { delay, isMockMode } from './_util'
+
 export interface Order {
   id: string
   type: 'subscription' | 'topup' | 'redeem'
@@ -67,10 +70,22 @@ const MOCK_ORDERS: Order[] = [
 ]
 
 export async function getOrders(): Promise<Order[]> {
-  await delay()
-  return MOCK_ORDERS.map((o) => ({ ...o }))
+  if (isMockMode()) {
+    await delay()
+    return MOCK_ORDERS.map((o) => ({ ...o }))
+  }
+  const res = await client.get<Order[]>('/orders')
+  return res.data
 }
 
-function delay(ms = 300) {
-  return new Promise((r) => setTimeout(r, ms))
+export async function refundOrder(id: string): Promise<Order> {
+  if (isMockMode()) {
+    await delay()
+    const order = MOCK_ORDERS.find((o) => o.id === id)
+    if (!order) throw new Error('Order not found')
+    order.status = 'refunded'
+    return { ...order }
+  }
+  const res = await client.post<Order>(`/orders/${id}/refund-request`)
+  return res.data
 }

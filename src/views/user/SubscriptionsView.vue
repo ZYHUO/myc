@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { UiCard, UiBadge, UiButton, UiProgressBar } from '@/components/ui'
+import type { BadgeVariant } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
 import { getSubscriptions, type Subscription } from '@/api/subscriptions'
 
@@ -10,8 +11,13 @@ const toast = useToast()
 const { confirm } = useConfirm()
 
 onMounted(async () => {
-  subscriptions.value = await getSubscriptions()
-  loading.value = false
+  try {
+    subscriptions.value = await getSubscriptions()
+  } catch {
+    toast.error('Failed to load subscriptions')
+  } finally {
+    loading.value = false
+  }
 })
 
 async function handleRenew(sub: Subscription) {
@@ -27,7 +33,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
-function statusVariant(status: string) {
+function statusVariant(status: Subscription['status']): BadgeVariant {
   if (status === 'active') return 'green'
   if (status === 'expired') return 'gray'
   return 'red'
@@ -57,7 +63,7 @@ function statusVariant(status: string) {
               Expires {{ formatDate(sub.expiresAt) }}
             </p>
           </div>
-          <UiBadge :variant="statusVariant(sub.status) as any">
+          <UiBadge :variant="statusVariant(sub.status)">
             {{ sub.status }}
           </UiBadge>
         </div>

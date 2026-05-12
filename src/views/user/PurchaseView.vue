@@ -90,7 +90,7 @@ function handleSelectPlan(planName: string) {
     <!-- Tab Bar -->
     <div class="border-b border-border flex gap-8">
       <button
-        class="pb-3 text-sm font-medium transition-colors duration-0.15s border-b-2"
+        class="pb-3 text-sm font-medium transition-colors duration-150 border-b-2"
         :class="activeTab === 'balance'
           ? 'border-fg text-fg'
           : 'border-transparent text-muted-fg hover:text-fg'"
@@ -99,7 +99,7 @@ function handleSelectPlan(planName: string) {
         Balance
       </button>
       <button
-        class="pb-3 text-sm font-medium transition-colors duration-0.15s border-b-2"
+        class="pb-3 text-sm font-medium transition-colors duration-150 border-b-2"
         :class="activeTab === 'subscriptions'
           ? 'border-fg text-fg'
           : 'border-transparent text-muted-fg hover:text-fg'"
@@ -118,7 +118,7 @@ function handleSelectPlan(planName: string) {
           <button
             v-for="amt in presetAmounts"
             :key="amt"
-            class="h-12 rounded-md border text-sm font-medium tabular-nums transition-all duration-0.15s"
+            class="h-12 rounded-md border text-sm font-medium tabular-nums transition-all duration-150"
             :class="selectedAmount === amt && !customAmount
               ? 'border-fg text-fg bg-fg/5'
               : 'border-border text-muted-fg hover:border-fg hover:text-fg'"
@@ -144,7 +144,7 @@ function handleSelectPlan(planName: string) {
           <button
             v-for="method in paymentMethods"
             :key="method"
-            class="flex items-center justify-center h-16 rounded-md border text-sm font-medium transition-all duration-0.15s"
+            class="flex items-center justify-center h-16 rounded-md border text-sm font-medium transition-all duration-150"
             :class="selectedMethod === method
               ? 'border-primary text-fg bg-primary/5'
               : 'border-border text-muted-fg hover:border-fg hover:text-fg'"

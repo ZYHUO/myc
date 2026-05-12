@@ -18,7 +18,11 @@ const newKeyCustom = ref('')
 const groupOptions = ['default', 'production', 'staging', 'development']
 
 onMounted(async () => {
-  keys.value = await getKeys()
+  try {
+    keys.value = await getKeys()
+  } catch {
+    toast.error('Failed to load API keys')
+  }
 })
 
 async function handleDelete(id: string) {

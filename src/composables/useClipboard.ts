@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useClipboard as useVueClipboard } from '@vueuse/core'
 
 export function useClipboard() {
-  const { copy: rawCopy, copied: rawCopied } = useVueClipboard()
+  const { copy: rawCopy } = useVueClipboard({ legacy: true })
   const copied = ref(false)
 
   async function copy(text: string) {
