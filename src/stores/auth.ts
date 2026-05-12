@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import client from '@/api/client'
-import { isMockMode, delay } from '@/api/_util'
+import { isMockMode, delay, unwrap } from '@/api/_util'
 
 export interface User {
   id: string
@@ -60,13 +60,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     // Real API: send email + password
-    const res = await client.post('/auth/login', {
+    const res = await client.post<unknown>('/auth/login', {
       email: emailOrUsername,
       password,
     })
 
-    // Response is wrapped: {code, message, data: {access_token, refresh_token, user}}
-    const payload = res.data.data || res.data
+    const payload = unwrap<LoginResponse>(res)
     localStorage.setItem('token', payload.access_token)
     localStorage.setItem('refresh_token', payload.refresh_token)
 
@@ -112,8 +111,8 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     try {
-      const res = await client.get('/user/profile')
-      const d = res.data.data || res.data
+      const res = await client.get<unknown>('/user/profile')
+      const d = unwrap<LoginResponse['user']>(res)
       user.value = {
         id: String(d.id),
         username: d.username || d.email?.split('@')[0] || '',

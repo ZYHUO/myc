@@ -1,5 +1,5 @@
 import client from './client'
-import { delay, isMockMode } from './_util'
+import { delay, isMockMode, unwrap, httpStatus } from './_util'
 
 export interface Subscription {
   id: string
@@ -69,7 +69,21 @@ export async function getSubscriptions(): Promise<Subscription[]> {
     await delay()
     return MOCK_SUBSCRIPTIONS.map(s => ({ ...s }))
   }
-  const res = await client.get('/subscriptions')
-  const items = res.data.data || res.data
-  return Array.isArray(items) ? items.map(mapSub) : []
+  // TODO(sub2api): swap to the canonical user-subscriptions route once the
+  // backend exposes one. Today the /subscriptions endpoint isn't wired, so
+  // a 404 is the expected response and we surface an empty list rather
+  // than an error toast.
+  try {
+    const body = unwrap<{ items?: unknown[] } | unknown[]>(await client.get('/subscriptions'))
+    const items = Array.isArray(body) ? body : body?.items ?? []
+    return items.map(mapSub)
+  } catch (err) {
+    if (httpStatus(err) === 404) {
+      if (import.meta.env.DEV) {
+        console.warn('[subscriptions] /subscriptions endpoint not available on this backend yet')
+      }
+      return []
+    }
+    throw err
+  }
 }

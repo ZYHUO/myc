@@ -1,32 +1,50 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, toValue, type MaybeRefOrGetter } from 'vue'
 
 const REDUCED_MOTION =
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function useCountUp(target: number, duration = 1000) {
-  const value = ref(REDUCED_MOTION ? target : 0)
-  let start: number | null = null
+/**
+ * Count up to `target` over `duration` ms. When `target` is reactive (ref
+ * or getter), re-animates from the current value to the new target each
+ * time it changes — useful for stats that arrive after a fetch.
+ */
+export function useCountUp(target: MaybeRefOrGetter<number>, duration = 1000) {
+  const initial = toValue(target)
+  const value = ref(REDUCED_MOTION ? initial : 0)
   let rafId: number | null = null
 
-  function animate(timestamp: number) {
-    if (start === null) start = timestamp
-    const elapsed = timestamp - start
-    const progress = Math.min(elapsed / duration, 1)
-    // ease-out cubic
-    const eased = 1 - Math.pow(1 - progress, 3)
-    value.value = Math.round(eased * target)
-
-    if (progress < 1) {
-      rafId = requestAnimationFrame(animate)
-    } else {
-      value.value = target
-      rafId = null
+  function animateTo(to: number) {
+    if (REDUCED_MOTION) {
+      value.value = to
+      return
     }
+    if (rafId !== null) cancelAnimationFrame(rafId)
+    const from = value.value
+    let start: number | null = null
+
+    function tick(ts: number) {
+      if (start === null) start = ts
+      const elapsed = ts - start
+      const progress = Math.min(elapsed / duration, 1)
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      value.value = Math.round(from + (to - from) * eased)
+      if (progress < 1) {
+        rafId = requestAnimationFrame(tick)
+      } else {
+        value.value = to
+        rafId = null
+      }
+    }
+    rafId = requestAnimationFrame(tick)
   }
 
   onMounted(() => {
-    if (REDUCED_MOTION) return
-    rafId = requestAnimationFrame(animate)
+    animateTo(toValue(target))
+    watch(
+      () => toValue(target),
+      (next) => animateTo(next),
+    )
   })
 
   onUnmounted(() => {

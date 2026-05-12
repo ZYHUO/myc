@@ -1,5 +1,5 @@
 import client from './client'
-import { delay, isMockMode } from './_util'
+import { delay, isMockMode, unwrap } from './_util'
 
 export interface ApiKey {
   id: string
@@ -76,9 +76,9 @@ export async function getKeys(): Promise<ApiKey[]> {
     await delay()
     return [...MOCK_KEYS]
   }
-  const res = await client.get('/keys')
-  const items = res.data.data?.items || res.data.items || res.data
-  return Array.isArray(items) ? items.map(mapKey) : []
+  const body = unwrap<{ items?: unknown[] } | unknown[]>(await client.get('/keys'))
+  const items = Array.isArray(body) ? body : body?.items ?? []
+  return items.map(mapKey)
 }
 
 export async function createKey(data: { name: string; group_id: number }): Promise<ApiKey> {
@@ -98,8 +98,7 @@ export async function createKey(data: { name: string; group_id: number }): Promi
       usage_5h: 0, usage_1d: 0, usage_7d: 0,
     }
   }
-  const res = await client.post('/keys', data)
-  return mapKey(res.data.data || res.data)
+  return mapKey(unwrap(await client.post('/keys', data)))
 }
 
 export async function updateKey(id: string, data: Partial<{ name: string; group_id: number; status: string }>): Promise<ApiKey> {
@@ -110,8 +109,7 @@ export async function updateKey(id: string, data: Partial<{ name: string; group_
     Object.assign(key, data)
     return { ...key }
   }
-  const res = await client.put(`/keys/${id}`, data)
-  return mapKey(res.data.data || res.data)
+  return mapKey(unwrap(await client.put(`/keys/${id}`, data)))
 }
 
 export async function deleteKey(id: string): Promise<void> {

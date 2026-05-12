@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 defineProps<{
@@ -12,7 +11,14 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
+
+async function handleLogout() {
+  emit('close')
+  await auth.logout()
+  router.replace({ name: 'login' })
+}
 
 interface NavItem {
   label: string
@@ -112,13 +118,24 @@ const navItems: NavItem[] = [
     <!-- User section -->
     <div class="border-t border-sidebar-border px-4 py-4">
       <div class="flex items-center gap-3">
-        <div class="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-fg">
+        <div class="h-8 w-8 shrink-0 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-fg">
           {{ auth.user?.username?.charAt(0).toUpperCase() || 'U' }}
         </div>
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-fg truncate">{{ auth.user?.username || 'Guest' }}</p>
-          <p class="text-xs text-muted-fg">¥{{ auth.user?.balance?.toFixed(2) ?? '0.00' }}</p>
+          <p class="text-xs text-muted-fg tabular-nums">${{ auth.user?.balance?.toFixed(2) ?? '0.00' }}</p>
         </div>
+        <button
+          type="button"
+          aria-label="Sign out"
+          title="Sign out"
+          class="shrink-0 flex h-8 w-8 items-center justify-center rounded-md text-muted-fg transition-colors duration-150 hover:bg-sidebar-accent hover:text-fg"
+          @click="handleLogout"
+        >
+          <svg class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+          </svg>
+        </button>
       </div>
     </div>
   </aside>

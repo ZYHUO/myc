@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import client from '@/api/client'
-import { isMockMode } from '@/api/_util'
+import { isMockMode, unwrap } from '@/api/_util'
 import { UiCard, UiButton, UiTable, UiStatusDot, UiSkeleton } from '@/components/ui'
 import { useCountUp } from '@/composables'
 
@@ -11,10 +11,17 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(true)
 
-const animatedKeys = useCountUp(0)
-const animatedRequests = useCountUp(0)
-const animatedTokens = useCountUp(0)
-const animatedBalance = useCountUp(Math.round((auth.user?.balance ?? 0) * 100))
+// Stats targets. They start at 0 and rise to the fetched values; useCountUp
+// watches each one and animates the displayed number when it changes.
+const totalKeys = ref(0)
+const totalRequests = ref(0)
+const totalTokensThousands = ref(0)
+const balanceCents = computed(() => Math.round((auth.user?.balance ?? 0) * 100))
+
+const animatedKeys = useCountUp(totalKeys)
+const animatedRequests = useCountUp(totalRequests)
+const animatedTokens = useCountUp(totalTokensThousands)
+const animatedBalance = useCountUp(balanceCents)
 
 const stats = [
   { get value() { return String(animatedKeys.value) }, label: 'Total Keys' },
@@ -26,27 +33,20 @@ const stats = [
 const barHeights = ref<number[]>(Array(12).fill(10))
 const recentUsage = ref<Array<{ time: string; model: string; tokens: string; cost: string; status: 'online' | 'offline' }>>([])
 
-onMounted(async () => {
-  // Fetch real usage data
-  if (!isMockMode()) {
-    try {
-      const res = await client.get('/admin/usage', { params: { page: 1, page_size: 5 } })
-      const items = res.data.data?.items || []
-      recentUsage.value = items.map((item: any) => ({
-        time: new Date(item.created_at).toLocaleTimeString(),
-        model: item.model || 'unknown',
-        tokens: ((item.tokens_prompt || 0) + (item.tokens_completion || 0)).toLocaleString(),
-        cost: `$${(item.cost_usd || 0).toFixed(4)}`,
-        status: item.status_code === 200 ? 'online' as const : 'offline' as const,
-      }))
+interface RawUsageLog {
+  created_at: string
+  model?: string
+  tokens_prompt?: number
+  tokens_completion?: number
+  cost_usd?: number
+  status_code?: number
+}
 
-      // Update balance from user profile
-      animatedBalance.value = Math.round((auth.user?.balance ?? 0) * 100)
-      animatedRequests.value = items.length
-    } catch (e) {
-      console.error('Failed to fetch usage:', e)
-    }
-  } else {
+onMounted(async () => {
+  if (isMockMode()) {
+    totalKeys.value = 7
+    totalRequests.value = 12847
+    totalTokensThousands.value = 3200
     recentUsage.value = [
       { time: '2 min ago', model: 'claude-sonnet-4', tokens: '2,847', cost: '$0.085', status: 'online' },
       { time: '5 min ago', model: 'gpt-4o', tokens: '1,230', cost: '$0.062', status: 'online' },
@@ -54,6 +54,24 @@ onMounted(async () => {
       { time: '18 min ago', model: 'deepseek-v3', tokens: '890', cost: '$0.009', status: 'offline' },
       { time: '25 min ago', model: 'gpt-4o-mini', tokens: '3,560', cost: '$0.011', status: 'online' },
     ]
+  } else {
+    try {
+      const body = unwrap<{ items?: RawUsageLog[]; total?: number } | RawUsageLog[]>(
+        await client.get('/admin/usage', { params: { page: 1, page_size: 5 } }),
+      )
+      const items = Array.isArray(body) ? body : body?.items ?? []
+      const total = Array.isArray(body) ? items.length : body?.total ?? items.length
+      totalRequests.value = total
+      recentUsage.value = items.map((item) => ({
+        time: new Date(item.created_at).toLocaleTimeString(),
+        model: item.model || 'unknown',
+        tokens: ((item.tokens_prompt || 0) + (item.tokens_completion || 0)).toLocaleString(),
+        cost: `$${(item.cost_usd || 0).toFixed(4)}`,
+        status: item.status_code === 200 ? ('online' as const) : ('offline' as const),
+      }))
+    } catch (e) {
+      console.error('Failed to fetch usage:', e)
+    }
   }
   loading.value = false
 })
