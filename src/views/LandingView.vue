@@ -225,8 +225,33 @@ function go(path: string) {
             <UiButton variant="secondary" size="lg" @click="router.push('/keys')">{{ t('landing.hero.authedSecondary') }}</UiButton>
           </template>
           <template v-else>
-            <UiButton v-if="showRegister" variant="primary" size="lg" @click="router.push('/register')">{{ t('landing.hero.ctaPrimary') }}</UiButton>
-            <UiButton variant="secondary" size="lg" @click="router.push('/login')">{{ t('landing.hero.ctaSecondary') }}</UiButton>
+            <!-- When `registration_enabled` is false, the primary slot
+                 becomes "Sign in" so the hero never looks lonely with one
+                 button; the secondary slot then anchors to the features
+                 section so curious visitors have somewhere to go. -->
+            <UiButton
+              v-if="showRegister"
+              variant="primary"
+              size="lg"
+              @click="router.push('/register')"
+            >
+              {{ t('landing.hero.ctaPrimary') }}
+            </UiButton>
+            <UiButton
+              :variant="showRegister ? 'secondary' : 'primary'"
+              size="lg"
+              @click="router.push('/login')"
+            >
+              {{ t('landing.hero.ctaSecondary') }}
+            </UiButton>
+            <UiButton
+              v-if="!showRegister"
+              variant="secondary"
+              size="lg"
+              @click="scrollTo('features')"
+            >
+              {{ t('common.learnMore') }}
+            </UiButton>
           </template>
         </div>
 
@@ -249,8 +274,9 @@ function go(path: string) {
         </div>
       </div>
 
-      <!-- Provider marquee -->
-      <div id="models" class="relative border-t border-border bg-card/30 overflow-hidden">
+      <!-- Provider marquee. Use the plain page background (not bg-card/30)
+           so the fade-edge gradient blends seamlessly in both themes. -->
+      <div id="models" class="relative border-t border-border overflow-hidden">
         <div class="mx-auto max-w-[1200px] px-4 sm:px-6 py-8">
           <p class="text-center text-[11px] uppercase tracking-[0.22em] text-muted-fg font-medium">{{ t('landing.hero.trustedBy') }}</p>
           <div class="mt-6 relative">
@@ -260,9 +286,11 @@ function go(path: string) {
                 <span class="font-display text-2xl sm:text-3xl tracking-tight text-muted-fg/80">{{ p }}</span>
               </div>
             </div>
-            <!-- Fade edges -->
-            <div class="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-bg to-transparent" aria-hidden="true"></div>
-            <div class="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-bg to-transparent" aria-hidden="true"></div>
+            <!-- Fade edges. The 3-stop gradient (solid → 60% → transparent)
+                 keeps the cut-off visible in dark mode where a 2-stop
+                 bg→transparent fade is essentially invisible. -->
+            <div class="marquee-edge marquee-edge-left" aria-hidden="true"></div>
+            <div class="marquee-edge marquee-edge-right" aria-hidden="true"></div>
           </div>
         </div>
       </div>
@@ -270,21 +298,24 @@ function go(path: string) {
 
     <!-- ─── Stats ──────────────────────────────────────────────────────── -->
     <section ref="statsRef" class="border-t border-border">
-      <div class="mx-auto max-w-[1200px] px-4 sm:px-6 py-14 sm:py-20 grid grid-cols-2 md:grid-cols-4 gap-y-10 gap-x-6">
-        <div class="reveal">
-          <p class="font-display text-5xl sm:text-6xl tracking-tight tabular-nums">{{ animatedModels }}+</p>
+      <!-- Smaller heading font on mobile so wide values like "<1 分钟" never
+           overflow their column on a 360 px viewport. `min-w-0` on each cell
+           lets text shrink (or wrap) instead of pushing the grid to 1-col. -->
+      <div class="mx-auto max-w-[1200px] px-4 sm:px-6 py-12 sm:py-20 grid grid-cols-2 md:grid-cols-4 gap-y-8 sm:gap-y-10 gap-x-4 sm:gap-x-6">
+        <div class="reveal min-w-0">
+          <p class="font-display text-4xl sm:text-5xl md:text-6xl tracking-tight tabular-nums">{{ animatedModels }}+</p>
           <p class="mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-fg">{{ t('landing.stats.models') }}</p>
         </div>
-        <div class="reveal reveal-delay-1">
-          <p class="font-display text-5xl sm:text-6xl tracking-tight tabular-nums">{{ (animatedUptime / 10).toFixed(1) }}%</p>
+        <div class="reveal reveal-delay-1 min-w-0">
+          <p class="font-display text-4xl sm:text-5xl md:text-6xl tracking-tight tabular-nums">{{ (animatedUptime / 10).toFixed(1) }}%</p>
           <p class="mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-fg">{{ t('landing.stats.uptime') }}</p>
         </div>
-        <div class="reveal reveal-delay-2">
-          <p class="font-display text-5xl sm:text-6xl tracking-tight">{{ t('landing.stats.setupValue') }}</p>
+        <div class="reveal reveal-delay-2 min-w-0">
+          <p class="font-display text-3xl sm:text-5xl md:text-6xl tracking-tight whitespace-nowrap">{{ t('landing.stats.setupValue') }}</p>
           <p class="mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-fg">{{ t('landing.stats.setup') }}</p>
         </div>
-        <div class="reveal reveal-delay-3">
-          <p class="font-display text-5xl sm:text-6xl tracking-tight tabular-nums">{{ animatedRegions }}</p>
+        <div class="reveal reveal-delay-3 min-w-0">
+          <p class="font-display text-4xl sm:text-5xl md:text-6xl tracking-tight tabular-nums">{{ animatedRegions }}</p>
           <p class="mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-fg">{{ t('landing.stats.regions') }}</p>
         </div>
       </div>
@@ -489,6 +520,40 @@ function go(path: string) {
 
 <style scoped>
 .text-balance { text-wrap: balance; }
+
+/* Provider-marquee fade edges. A 3-stop gradient (solid → 60% → transparent)
+   stays visible in dark mode where a plain bg-to-transparent fade is almost
+   indistinguishable from the surrounding page colour. Wider on `sm+` for
+   desktop, modest on mobile to leave room for the wordmarks. */
+.marquee-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  pointer-events: none;
+  z-index: 1;
+}
+@media (min-width: 640px) {
+  .marquee-edge { width: 96px; }
+}
+.marquee-edge-left {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    var(--color-bg) 0%,
+    color-mix(in srgb, var(--color-bg) 70%, transparent) 55%,
+    transparent 100%
+  );
+}
+.marquee-edge-right {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    var(--color-bg) 0%,
+    color-mix(in srgb, var(--color-bg) 70%, transparent) 55%,
+    transparent 100%
+  );
+}
 
 /* Mobile drawer slide */
 .drawer-enter-active, .drawer-leave-active {

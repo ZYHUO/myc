@@ -44,6 +44,15 @@ const pwaPlugin: PluginOption | false = isStorybook
         // Don't intercept the API proxy — those calls need fresh data and the
         // SW would otherwise return a stale (or wrong) response from cache.
         navigateFallbackDenylist: [/^\/api\//],
+        // CRITICAL for shipping fixes: without these, a new SW only activates
+        // after EVERY tab closes — users can stare at a stale UI through
+        // refreshes for days. With skipWaiting the new SW takes over on the
+        // next page load; clientsClaim makes it own all open tabs immediately.
+        // cleanupOutdatedCaches sweeps Workbox precache buckets from older
+        // versions so storage doesn't slowly bloat.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*\.(woff2|css)$/,
