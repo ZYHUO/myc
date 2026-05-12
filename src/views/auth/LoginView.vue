@@ -30,17 +30,10 @@ async function handleSubmit() {
   try {
     await auth.login(email.value.trim(), password.value)
     toast.success('Welcome back')
-    // Force redirect using window.location for reliability
-    const target = redirectTarget.value
-    window.location.href = target
-  } catch (err: any) {
-    // If navigation aborted (e.g. guard redirected), that's OK
-    if (err?.type === 1 /* NavigationFailureType.aborted */ || err?.message?.includes('navigation')) {
-      // Navigation was redirected, probably to dashboard - that's fine
-    } else {
-      const message = err instanceof Error ? err.message : 'Login failed'
-      toast.error(message)
-    }
+    await router.replace(redirectTarget.value)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Login failed'
+    toast.error(message)
   } finally {
     submitting.value = false
   }

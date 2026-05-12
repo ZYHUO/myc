@@ -98,11 +98,10 @@ router.beforeEach(async (to) => {
 
   const auth = useAuthStore()
 
-  // If already authenticated (e.g. just logged in), allow immediately
-  console.log('[Guard]', to.path, 'initialized:', auth.initialized, 'authenticated:', auth.isAuthenticated)
+  // Already authenticated (e.g. just logged in): allow immediately.
   if (auth.isAuthenticated) return true
 
-  // First visit: fetch user from stored token
+  // First visit: hydrate from the stored token.
   if (!auth.initialized) {
     await auth.fetchUser()
   }

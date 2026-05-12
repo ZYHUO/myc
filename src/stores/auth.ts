@@ -60,21 +60,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     // Real API: send email + password
-    console.log('[Auth] calling login API...')
     const res = await client.post('/auth/login', {
       email: emailOrUsername,
       password,
     })
-    console.log('[Auth] API response code:', res.data?.code)
 
     // Response is wrapped: {code, message, data: {access_token, refresh_token, user}}
     const payload = res.data.data || res.data
-    console.log('[Auth] payload keys:', Object.keys(payload))
     localStorage.setItem('token', payload.access_token)
     localStorage.setItem('refresh_token', payload.refresh_token)
 
     const u = payload.user
-    console.log('[Auth] user:', u.email, u.role)
     user.value = {
       id: String(u.id),
       username: u.username || u.email.split('@')[0],
@@ -86,7 +82,6 @@ export const useAuthStore = defineStore('auth', () => {
       concurrency: u.concurrency,
       allowed_groups: u.allowed_groups,
     }
-    console.log('[Auth] login complete, user set')
   }
 
   async function logout() {
