@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
+import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
 import { useCountUp } from '@/composables'
 
 const router = useRouter()
@@ -127,6 +128,7 @@ function go(path: string) {
         <!-- Right actions -->
         <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <UiLanguageSwitcher />
+          <UiThemeSwitcher />
           <template v-if="isAuthed">
             <UiButton variant="primary" size="md" class="hidden sm:inline-flex" @click="router.push('/dashboard')">
               {{ t('common.openDashboard') }}

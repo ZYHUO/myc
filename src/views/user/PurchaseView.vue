@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiCard, UiBadge, UiButton, UiInput, UiModal } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
 import { useAuthStore } from '@/stores/auth'
@@ -8,6 +9,7 @@ import * as payment from '@/api/payment'
 const auth = useAuthStore()
 const toast = useToast()
 const { confirm } = useConfirm()
+const { t } = useI18n()
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +69,7 @@ onMounted(async () => {
       selectedChannelKey.value = ch[0].key
     }
   } catch {
-    toast.error('Failed to load payment options')
+    toast.error(t('purchase.toast.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -90,31 +92,31 @@ function onCustomAmount(val: string) {
 
 async function handleProceedToPay() {
   if (!paymentEnabled.value) {
-    toast.warning('Payments are currently disabled on this server')
+    toast.warning(t('purchase.toast.disabledWarn'))
     return
   }
   if (!selectedChannel.value) {
-    toast.error('Please choose a payment channel')
+    toast.error(t('purchase.toast.pickChannel'))
     return
   }
   const amount = currentTotal.value
   if (amount <= 0) {
-    toast.error('Please choose an amount')
+    toast.error(t('purchase.toast.pickAmount'))
     return
   }
   const min = limits.value?.min_amount ?? 0
   const max = limits.value?.max_amount ?? 0
   if (min > 0 && amount < min) {
-    toast.error(`Amount must be at least $${min}`)
+    toast.error(t('purchase.toast.minError', { n: min }))
     return
   }
   if (max > 0 && amount > max) {
-    toast.error(`Amount must not exceed $${max}`)
+    toast.error(t('purchase.toast.maxError', { n: max }))
     return
   }
   const confirmed = await confirm({
-    title: 'Confirm Payment',
-    message: `Top up $${amount.toFixed(2)} via ${selectedChannel.value.name}?`,
+    title: t('purchase.toast.confirmTitle'),
+    message: t('purchase.toast.confirmTopupMsg', { amount: amount.toFixed(2), channel: selectedChannel.value.name }),
   })
   if (!confirmed) return
   paying.value = true
@@ -136,10 +138,10 @@ async function handleProceedToPay() {
       orderModalOpen.value = true
       startPolling(order.out_trade_no)
     } else {
-      toast.success('Order created')
+      toast.success(t('purchase.toast.orderCreated'))
     }
   } catch {
-    toast.error('Failed to create order')
+    toast.error(t('purchase.toast.orderCreateFailed'))
   } finally {
     paying.value = false
   }
@@ -156,10 +158,10 @@ function startPolling(outTradeNo: string) {
         orderModalOpen.value = false
         orderInProgress.value = null
         await auth.fetchUser()
-        toast.success('Payment received — balance updated')
+        toast.success(t('purchase.toast.received'))
       } else if (Date.now() > deadline) {
         stopPolling()
-        toast.warning('Stopped checking. Refresh the page once you complete the payment.')
+        toast.warning(t('purchase.toast.checkStopped'))
       }
     } catch {
       // transient; the next tick can retry
@@ -188,17 +190,17 @@ async function handleCancelOrder() {
 
 async function handleSelectPlan(plan: payment.PaymentPlan) {
   if (!paymentEnabled.value) {
-    toast.warning('Payments are currently disabled on this server')
+    toast.warning(t('purchase.toast.disabledWarn'))
     return
   }
   if (!selectedChannel.value) {
-    toast.error('No payment channel available')
+    toast.error(t('purchase.toast.noChannel'))
     return
   }
   selectedPlan.value = plan.id
   const confirmed = await confirm({
-    title: 'Subscribe',
-    message: `Purchase "${plan.name}" for $${plan.price.toFixed(2)}?`,
+    title: t('purchase.toast.confirmSubscribeTitle'),
+    message: t('purchase.toast.confirmSubscribeMsg', { name: plan.name, price: plan.price.toFixed(2) }),
   })
   if (!confirmed) return
   paying.value = true
@@ -219,10 +221,10 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
       orderModalOpen.value = true
       startPolling(order.out_trade_no)
     } else {
-      toast.success('Subscription order created')
+      toast.success(t('purchase.toast.subOrderCreated'))
     }
   } catch {
-    toast.error('Failed to create subscription order')
+    toast.error(t('purchase.toast.subFailed'))
   } finally {
     paying.value = false
   }
@@ -233,8 +235,8 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">PURCHASE</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Top up or subscribe</h1>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('purchase.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('purchase.title') }}</h1>
     </div>
 
     <!-- Disabled banner -->
@@ -242,14 +244,12 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
       v-if="!loading && !paymentEnabled"
       class="rounded-xl border border-dashed border-border bg-card p-6"
     >
-      <p class="text-base font-medium text-fg">Payments are not enabled on this server</p>
-      <p class="mt-2 text-sm text-muted-fg leading-relaxed">
-        The administrator hasn't enabled the payment system yet. Once enabled, you'll be able to
-        top up balance and purchase subscriptions here. In the meantime, ask your administrator
-        for a redeem code on the
-        <RouterLink to="/redeem" class="text-fg underline">Redeem</RouterLink>
-        page.
-      </p>
+      <p class="text-base font-medium text-fg">{{ t('purchase.disabledTitle') }}</p>
+      <i18n-t keypath="purchase.disabledBody" tag="p" class="mt-2 text-sm text-muted-fg leading-relaxed">
+        <template #redeem>
+          <RouterLink to="/redeem" class="text-fg underline">{{ t('nav.items.redeem') }}</RouterLink>
+        </template>
+      </i18n-t>
     </div>
 
     <template v-else-if="!loading">
@@ -263,7 +263,7 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
             : 'border-transparent text-muted-fg hover:text-fg'"
           @click="activeTab = 'balance'"
         >
-          Balance
+          {{ t('purchase.tabs.balance') }}
         </button>
         <button
           type="button"
@@ -273,8 +273,8 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
             : 'border-transparent text-muted-fg hover:text-fg'"
           @click="activeTab = 'subscriptions'"
         >
-          Subscriptions
-          <span v-if="plans.length === 0" class="text-[10px] uppercase tracking-wider text-muted-fg ml-1">empty</span>
+          {{ t('purchase.tabs.subscriptions') }}
+          <span v-if="plans.length === 0" class="text-[10px] uppercase tracking-wider text-muted-fg ml-1">{{ t('purchase.tabs.empty') }}</span>
         </button>
       </div>
 
@@ -282,7 +282,7 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
       <div v-if="activeTab === 'balance'" class="space-y-10">
         <!-- Amount -->
         <div class="space-y-5">
-          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">AMOUNT</p>
+          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('purchase.amountLabel') }}</p>
           <div v-if="presetAmounts.length > 0" class="grid grid-cols-3 sm:grid-cols-6 gap-3">
             <button
               v-for="amt in presetAmounts"
@@ -301,20 +301,20 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
             <UiInput
               :model-value="customAmount"
               type="number"
-              placeholder="Custom amount"
+              :placeholder="t('purchase.customPlaceholder')"
               @update:model-value="onCustomAmount($event as string)"
             />
           </div>
           <p v-if="limits && (limits.min_amount > 0 || limits.max_amount > 0)" class="text-xs text-muted-fg">
-            <template v-if="limits.min_amount > 0">Min ${{ limits.min_amount }}</template>
+            <template v-if="limits.min_amount > 0">{{ t('purchase.minMax.min', { n: limits.min_amount }) }}</template>
             <template v-if="limits.min_amount > 0 && limits.max_amount > 0"> · </template>
-            <template v-if="limits.max_amount > 0">Max ${{ limits.max_amount }}</template>
+            <template v-if="limits.max_amount > 0">{{ t('purchase.minMax.max', { n: limits.max_amount }) }}</template>
           </p>
         </div>
 
         <!-- Payment Method -->
         <div class="space-y-5">
-          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">PAYMENT METHOD</p>
+          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('purchase.paymentMethodLabel') }}</p>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               v-for="ch in channels"
@@ -334,11 +334,11 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
         <!-- Total + Submit -->
         <div class="border-t border-border pt-6 space-y-5">
           <div class="flex items-center justify-between">
-            <span class="text-sm text-muted-fg">Total</span>
+            <span class="text-sm text-muted-fg">{{ t('purchase.total') }}</span>
             <span class="text-2xl font-light tabular-nums font-mono">${{ currentTotal.toFixed(2) }}</span>
           </div>
           <UiButton variant="primary" size="lg" class="w-full" :disabled="paying || currentTotal <= 0" @click="handleProceedToPay">
-            {{ paying ? 'Processing…' : 'Proceed to Pay' }}
+            {{ paying ? t('purchase.processing') : t('purchase.proceed') }}
           </UiButton>
         </div>
       </div>
@@ -346,8 +346,8 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
       <!-- Subscriptions Tab -->
       <div v-if="activeTab === 'subscriptions'">
         <div v-if="plans.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center space-y-2">
-          <p class="text-base font-medium">No subscription plans available</p>
-          <p class="text-sm text-muted-fg">The administrator hasn't published any plans yet.</p>
+          <p class="text-base font-medium">{{ t('purchase.noPlans') }}</p>
+          <p class="text-sm text-muted-fg">{{ t('purchase.noPlansSub') }}</p>
         </div>
         <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-5">
           <UiCard v-for="plan in plans" :key="plan.id">
@@ -355,7 +355,7 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
               <div>
                 <p class="text-xl font-medium">{{ plan.name }}</p>
                 <p class="mt-1 text-3xl font-light tabular-nums font-mono">
-                  ${{ plan.price.toFixed(2) }}<span class="text-sm text-muted-fg font-normal">/{{ plan.validity_days }}d</span>
+                  ${{ plan.price.toFixed(2) }}<span class="text-sm text-muted-fg font-normal">{{ t('purchase.plan.durationSuffix', { n: plan.validity_days }) }}</span>
                 </p>
                 <p v-if="plan.original_price && plan.original_price > plan.price" class="text-xs text-muted-fg line-through tabular-nums">
                   ${{ plan.original_price.toFixed(2) }}
@@ -386,7 +386,7 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
                 :disabled="paying"
                 @click="handleSelectPlan(plan)"
               >
-                {{ selectedPlan === plan.id && paying ? 'Processing…' : 'Subscribe' }}
+                {{ selectedPlan === plan.id && paying ? t('purchase.processing') : t('purchase.subscribe') }}
               </UiButton>
             </div>
           </UiCard>
@@ -395,25 +395,24 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
     </template>
 
     <!-- Pending Order Modal -->
-    <UiModal v-model="orderModalOpen" title="Complete your payment">
+    <UiModal v-model="orderModalOpen" :title="t('purchase.modal.title')">
       <template v-if="orderInProgress">
         <div v-if="orderInProgress.qr" class="flex flex-col items-center gap-3">
-          <p class="text-sm text-muted-fg">Scan the QR code to complete payment</p>
-          <img :src="orderInProgress.qr" alt="Payment QR code" class="h-48 w-48 rounded-md border border-border" />
+          <p class="text-sm text-muted-fg">{{ t('purchase.modal.qrHint') }}</p>
+          <img :src="orderInProgress.qr" alt="" class="h-48 w-48 rounded-md border border-border" />
         </div>
         <div v-else class="space-y-3">
-          <p class="text-sm text-muted-fg">
-            We've opened the payment provider in a new tab. After completing the payment, return
-            here — your balance will refresh automatically.
-          </p>
-          <p v-if="orderInProgress.pay_url" class="text-xs text-muted-fg">
-            If the tab didn't open, <a :href="orderInProgress.pay_url" target="_blank" rel="noopener" class="text-fg underline">click here</a>.
-          </p>
+          <p class="text-sm text-muted-fg">{{ t('purchase.modal.newTabHint') }}</p>
+          <i18n-t v-if="orderInProgress.pay_url" keypath="purchase.modal.didntOpen" tag="p" class="text-xs text-muted-fg">
+            <template #click>
+              <a :href="orderInProgress.pay_url" target="_blank" rel="noopener noreferrer" class="text-fg underline">{{ t('purchase.modal.clickHere') }}</a>
+            </template>
+          </i18n-t>
         </div>
-        <p class="mt-4 font-mono text-xs text-muted-fg">Order: {{ orderInProgress.out_trade_no }}</p>
+        <p class="mt-4 font-mono text-xs text-muted-fg">{{ t('purchase.modal.orderRef', { id: orderInProgress.out_trade_no }) }}</p>
       </template>
       <template #footer>
-        <UiButton variant="secondary" @click="handleCancelOrder">Cancel order</UiButton>
+        <UiButton variant="secondary" @click="handleCancelOrder">{{ t('purchase.modal.cancelOrder') }}</UiButton>
       </template>
     </UiModal>
   </div>

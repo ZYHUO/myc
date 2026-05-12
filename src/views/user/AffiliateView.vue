@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiCard, UiButton, UiCopyButton, UiTable } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
 import { useAuthStore } from '@/stores/auth'
@@ -15,12 +16,13 @@ const loading = ref(true)
 const transferring = ref(false)
 const toast = useToast()
 const { confirm } = useConfirm()
+const { t, locale } = useI18n()
 
 onMounted(async () => {
   try {
     data.value = await getAffiliateData()
   } catch {
-    toast.error('Failed to load affiliate data')
+    toast.error(t('affiliate.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -29,12 +31,13 @@ onMounted(async () => {
 async function handleTransfer() {
   const amount = data.value.stats.availableRebate
   if (amount <= 0) {
-    toast.warning('No rebate available to transfer')
+    toast.warning(t('affiliate.noRebate'))
     return
   }
+  const amountStr = amount.toFixed(2)
   const confirmed = await confirm({
-    title: 'Transfer to Balance',
-    message: `Transfer $${amount.toFixed(2)} from affiliate rebate to your account balance?`,
+    title: t('affiliate.transferTitle'),
+    message: t('affiliate.transferMsg', { amount: amountStr }),
   })
   if (!confirmed) return
   transferring.value = true
@@ -42,9 +45,9 @@ async function handleTransfer() {
     await transferAffiliateBalance(amount)
     data.value.stats.availableRebate = 0
     await auth.fetchUser()
-    toast.success(`$${amount.toFixed(2)} transferred to balance`)
+    toast.success(t('affiliate.transferOk', { amount: amountStr }))
   } catch {
-    toast.error('Transfer failed')
+    toast.error(t('affiliate.transferFail'))
   } finally {
     transferring.value = false
   }
@@ -52,30 +55,30 @@ async function handleTransfer() {
 
 function formatDate(iso: string): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('zh-CN', {
+  return new Date(iso).toLocaleDateString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   })
 }
 
-const statCards = [
-  { label: 'Total Referrals', get value() { return String(data.value.stats.totalReferrals) } },
-  { label: 'Available Rebate', get value() { return `$${data.value.stats.availableRebate.toFixed(2)}` } },
-  { label: 'Total Earned', get value() { return `$${data.value.stats.totalEarned.toFixed(2)}` } },
-]
+const statCards = computed(() => [
+  { label: t('affiliate.cards.totalReferrals'), value: String(data.value.stats.totalReferrals) },
+  { label: t('affiliate.cards.availableRebate'), value: `$${data.value.stats.availableRebate.toFixed(2)}` },
+  { label: t('affiliate.cards.totalEarned'), value: `$${data.value.stats.totalEarned.toFixed(2)}` },
+])
 </script>
 
 <template>
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">AFFILIATE</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Referral program</h1>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('affiliate.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('affiliate.title') }}</h1>
       <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">
-        Invite friends and earn rebates on their usage.
+        {{ t('affiliate.subtitle') }}
         <template v-if="data.stats.rebateRatePercent > 0">
-          Your current rate is <span class="text-fg font-medium">{{ data.stats.rebateRatePercent }}%</span>.
+          {{ t('affiliate.rateSuffix', { n: data.stats.rebateRatePercent }) }}
         </template>
       </p>
     </div>
@@ -98,12 +101,12 @@ const statCards = [
 
       <!-- Referral Link -->
       <UiCard>
-        <p class="text-sm font-medium mb-3">Your referral link</p>
+        <p class="text-sm font-medium mb-3">{{ t('affiliate.yourLink') }}</p>
         <div class="flex gap-2">
           <input
             :value="data.referralLink"
             readonly
-            aria-label="Referral link"
+            :aria-label="t('affiliate.yourLink')"
             class="flex-1 h-10 rounded-md border border-input bg-card px-3 text-sm text-fg font-mono outline-none"
           />
           <UiCopyButton :text="data.referralLink" />
@@ -112,14 +115,14 @@ const statCards = [
 
       <!-- Recent Activity -->
       <div class="space-y-5">
-        <p class="text-3xl font-display font-normal tracking-tight">Recent activity</p>
+        <p class="text-2xl sm:text-3xl font-display font-normal tracking-tight">{{ t('affiliate.recent') }}</p>
 
         <UiTable v-if="data.activity.length > 0">
           <thead>
             <tr class="border-b border-border">
-              <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">User</th>
-              <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Joined</th>
-              <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Rebate</th>
+              <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('affiliate.cols.user') }}</th>
+              <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('affiliate.cols.joined') }}</th>
+              <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('affiliate.cols.rebate') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -130,13 +133,13 @@ const statCards = [
             </tr>
           </tbody>
         </UiTable>
-        <p v-else class="text-sm text-muted-fg">No referrals yet. Share your link to start earning.</p>
+        <p v-else class="text-sm text-muted-fg">{{ t('affiliate.empty') }}</p>
       </div>
 
       <!-- Transfer Button -->
       <div>
         <UiButton variant="secondary" :disabled="transferring || data.stats.availableRebate <= 0" @click="handleTransfer">
-          {{ transferring ? 'Transferring…' : 'Transfer to Balance' }}
+          {{ transferring ? t('affiliate.transferring') : t('affiliate.transfer') }}
         </UiButton>
       </div>
     </template>

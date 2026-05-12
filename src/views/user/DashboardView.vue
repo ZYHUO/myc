@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import client from '@/api/client'
 import { isMockMode, unwrap } from '@/api/_util'
@@ -9,6 +10,7 @@ import { useCountUp } from '@/composables'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 const loading = ref(true)
 
 // Stats targets. They start at 0 and rise to the fetched values; useCountUp
@@ -23,12 +25,12 @@ const animatedRequests = useCountUp(totalRequests)
 const animatedTokens = useCountUp(totalTokensThousands)
 const animatedBalance = useCountUp(balanceCents)
 
-const stats = [
-  { get value() { return String(animatedKeys.value) }, label: 'Total Keys' },
-  { get value() { return animatedRequests.value.toLocaleString() }, label: 'Total Requests' },
-  { get value() { return `${(animatedTokens.value / 1000).toFixed(1)}M` }, label: 'Tokens Used' },
-  { get value() { return `$${(animatedBalance.value / 100).toFixed(2)}` }, label: 'Balance' },
-]
+const stats = computed(() => [
+  { value: String(animatedKeys.value), label: t('dashboard.cards.totalKeys') },
+  { value: animatedRequests.value.toLocaleString(), label: t('dashboard.cards.totalRequests') },
+  { value: `${(animatedTokens.value / 1000).toFixed(1)}M`, label: t('dashboard.cards.tokensUsed') },
+  { value: `$${(animatedBalance.value / 100).toFixed(2)}`, label: t('dashboard.cards.balance') },
+])
 
 const barHeights = ref<number[]>(Array(12).fill(10))
 const recentUsage = ref<Array<{ time: string; model: string; tokens: string; cost: string; status: 'online' | 'offline' }>>([])
@@ -60,16 +62,16 @@ interface TrendPoint {
 }
 
 function relativeTime(iso: string): string {
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return iso
-  const diff = Math.max(0, Date.now() - t)
+  const time = new Date(iso).getTime()
+  if (Number.isNaN(time)) return iso
+  const diff = Math.max(0, Date.now() - time)
   const m = Math.floor(diff / 60_000)
-  if (m < 1) return 'Just now'
-  if (m < 60) return `${m}m ago`
+  if (m < 1) return t('common.timeAgo.justNow')
+  if (m < 60) return t('common.timeAgo.minute', { n: m })
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
+  if (h < 24) return t('common.timeAgo.hour', { n: h })
   const d = Math.floor(h / 24)
-  return `${d}d ago`
+  return t('common.timeAgo.day', { n: d })
 }
 
 function mapRecentUsage(item: RawUsageLog) {
@@ -126,7 +128,7 @@ onMounted(async () => {
     const items = Array.isArray(usage) ? usage : usage?.items ?? []
     recentUsage.value = items.map(mapRecentUsage)
   } catch (e) {
-    console.error('Dashboard load failed:', e)
+    console.error(t('dashboard.loadFailed') + ':', e)
   } finally {
     loading.value = false
   }
@@ -137,13 +139,12 @@ onMounted(async () => {
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">OVERVIEW</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">
-        Welcome back, <span class="font-normal">{{ auth.user?.username ?? 'User' }}</span>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('dashboard.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">
+        {{ t('dashboard.title') }}
+        <template v-if="auth.user?.username">— <span class="font-normal">{{ auth.user.username }}</span></template>
       </h1>
-      <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">
-        Your API relay at a glance.
-      </p>
+      <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">{{ t('dashboard.subtitle') }}</p>
     </div>
 
     <!-- Stat Cards -->
@@ -159,8 +160,8 @@ onMounted(async () => {
 
     <!-- Usage Trend -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">USAGE TREND</p>
-      <h2 class="text-3xl font-display font-normal tracking-tight mt-2">Requests over time</h2>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('dashboard.chart.title') }}</p>
+      <h2 class="text-2xl sm:text-3xl font-display font-normal tracking-tight mt-2">{{ t('dashboard.chart.caption') }}</h2>
       <UiCard class="mt-4">
         <div class="flex items-end gap-2 h-40">
           <div
@@ -170,37 +171,32 @@ onMounted(async () => {
             :style="{ height: `${h}%` }"
           />
         </div>
-        <div class="flex justify-between mt-3 text-[11px] text-muted-fg">
-          <span>Jan</span>
-          <span>Dec</span>
-        </div>
       </UiCard>
     </div>
 
     <!-- Recent Usage -->
     <div>
       <div class="flex items-center justify-between">
-        <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">RECENT USAGE</p>
+        <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('dashboard.recent.title') }}</p>
         <router-link
           to="/usage"
           class="text-sm text-muted-fg hover:text-fg transition-colors duration-150"
         >
-          View all →
+          {{ t('common.actions.viewAll') }} →
         </router-link>
       </div>
-      <h2 class="text-3xl font-display font-normal tracking-tight mt-2">Latest requests</h2>
-      <UiTable class="mt-4">
+      <UiTable v-if="recentUsage.length > 0" class="mt-4">
         <thead>
           <tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.18em] text-muted-fg">
-            <th class="px-4 py-3 font-medium">Time</th>
-            <th class="px-4 py-3 font-medium">Model</th>
-            <th class="px-4 py-3 font-medium">Tokens</th>
-            <th class="px-4 py-3 font-medium">Cost</th>
-            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium">{{ t('dashboard.recent.cols.time') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('dashboard.recent.cols.model') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('dashboard.recent.cols.tokens') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('dashboard.recent.cols.cost') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('dashboard.recent.cols.status') }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, idx) in recentUsage" :key="row.time" class="border-b border-border last:border-0 row-hover stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
+          <tr v-for="(row, idx) in recentUsage" :key="idx" class="border-b border-border last:border-0 row-hover stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
             <td class="px-4 py-3 font-mono text-muted-fg text-sm">{{ row.time }}</td>
             <td class="px-4 py-3 text-sm">{{ row.model }}</td>
             <td class="px-4 py-3 font-mono text-sm">{{ row.tokens }}</td>
@@ -211,16 +207,17 @@ onMounted(async () => {
           </tr>
         </tbody>
       </UiTable>
+      <p v-else-if="!loading" class="mt-4 text-sm text-muted-fg">{{ t('dashboard.recent.empty') }}</p>
     </div>
 
     <!-- Quick Actions -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">QUICK ACTIONS</p>
-      <h2 class="text-3xl font-display font-normal tracking-tight mt-2">Get things done</h2>
-      <div class="flex gap-3 mt-4">
-        <UiButton variant="primary" @click="router.push('/keys')">Create Key</UiButton>
-        <UiButton variant="secondary" @click="router.push('/purchase')">Top Up</UiButton>
-        <UiButton variant="secondary" @click="router.push('/usage')">View Usage</UiButton>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('dashboard.quickActions.title') }}</p>
+      <div class="flex flex-wrap gap-3 mt-4">
+        <UiButton variant="primary" @click="router.push('/keys')">{{ t('dashboard.quickActions.newKey') }}</UiButton>
+        <UiButton variant="secondary" @click="router.push('/purchase')">{{ t('dashboard.quickActions.purchase') }}</UiButton>
+        <UiButton variant="secondary" @click="router.push('/usage')">{{ t('dashboard.quickActions.viewUsage') }}</UiButton>
+        <UiButton variant="secondary" @click="router.push('/redeem')">{{ t('dashboard.quickActions.redeem') }}</UiButton>
       </div>
     </div>
   </div>

@@ -7,6 +7,8 @@ import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables'
 import { UiInput, UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
+import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
+import UiTurnstile from '@/components/ui/UiTurnstile.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -29,6 +31,8 @@ const codeCountdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const affCode = ref('')
+const turnstileToken = ref('')
+const turnstileRef = ref<InstanceType<typeof UiTurnstile> | null>(null)
 
 const settings = computed(() => settingsStore.settings)
 const registrationEnabled = computed(() => settings.value.registration_enabled)
@@ -36,7 +40,8 @@ const needsVerifyCode = computed(() => settings.value.email_verify_enabled)
 const needsAgreement = computed(() => settings.value.login_agreement_enabled)
 const showPromo = computed(() => settings.value.promo_code_enabled)
 const showInvitation = computed(() => settings.value.invitation_code_enabled)
-const turnstileWarning = computed(() => settings.value.turnstile_enabled)
+const turnstileEnabled = computed(() => settings.value.turnstile_enabled)
+const turnstileSiteKey = computed(() => settings.value.turnstile_site_key || '')
 
 const emailSuffixes = computed(() => settings.value.registration_email_suffix_whitelist ?? [])
 const suffixHint = computed(() =>
@@ -135,14 +140,20 @@ async function handleSendCode() {
     toast.error(t('auth.register.emailFirst'))
     return
   }
+  if (turnstileEnabled.value && !turnstileToken.value) {
+    toast.error(t('turnstile.pleaseComplete'))
+    return
+  }
   sendingCode.value = true
   try {
-    const wait = await auth.sendVerifyCode(email.value.trim())
+    const wait = await auth.sendVerifyCode(email.value.trim(), turnstileToken.value || undefined)
     startCountdown(wait || 60)
     toast.success(t('auth.register.sendSuccess'))
   } catch (err) {
     const msg = err instanceof Error ? err.message : t('auth.register.sendFailed')
     toast.error(msg)
+    // Turnstile tokens are one-shot; reset so the user can re-verify.
+    if (turnstileEnabled.value) turnstileRef.value?.reset()
   } finally {
     sendingCode.value = false
   }
@@ -155,6 +166,7 @@ function validate(): string | null {
   if (password.value !== passwordConfirm.value) return t('auth.register.vPasswordMismatch')
   if (needsVerifyCode.value && !verifyCode.value.trim()) return t('auth.register.vCodeRequired')
   if (needsAgreement.value && !agreed.value) return t('auth.register.vAgreementRequired')
+  if (turnstileEnabled.value && !turnstileToken.value) return t('turnstile.pleaseComplete')
   return null
 }
 
@@ -171,6 +183,7 @@ async function handleSubmit() {
       email: email.value.trim(),
       password: password.value,
       verifyCode: verifyCode.value.trim() || undefined,
+      turnstileToken: turnstileToken.value || undefined,
       promoCode: promoCode.value.trim() || undefined,
       invitationCode: invitationCode.value.trim() || undefined,
       affCode: affCode.value || undefined,
@@ -180,6 +193,7 @@ async function handleSubmit() {
   } catch (e) {
     const msg = e instanceof Error ? e.message : t('auth.register.failed')
     toast.error(msg)
+    if (turnstileEnabled.value) turnstileRef.value?.reset()
   } finally {
     submitting.value = false
   }
@@ -196,7 +210,10 @@ async function handleSubmit() {
         </div>
         <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
       </RouterLink>
-      <UiLanguageSwitcher />
+      <div class="flex items-center gap-1">
+        <UiLanguageSwitcher />
+        <UiThemeSwitcher />
+      </div>
     </header>
 
     <main class="flex flex-1 items-center justify-center px-6 py-8">
@@ -308,9 +325,16 @@ async function handleSubmit() {
             <span class="text-muted-fg leading-relaxed" v-html="agreementHtml"></span>
           </label>
 
-          <p v-if="turnstileWarning" class="text-xs text-amber leading-relaxed">
-            {{ t('auth.register.turnstileWarning') }}
-          </p>
+          <div v-if="turnstileEnabled" class="pt-1">
+            <UiTurnstile
+              ref="turnstileRef"
+              :sitekey="turnstileSiteKey"
+              :model-value="turnstileToken"
+              @update:model-value="turnstileToken = $event"
+              @expired="turnstileToken = ''"
+              @error="turnstileToken = ''"
+            />
+          </div>
 
           <UiButton type="submit" variant="primary" size="lg" class="w-full" :disabled="submitting">
             {{ submitting ? t('auth.register.submitting') : t('auth.register.submit') }}

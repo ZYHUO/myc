@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiTable, UiBadge, UiButton } from '@/components/ui'
 import type { BadgeVariant } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
@@ -9,13 +10,14 @@ const orders = ref<payment.PaymentOrder[]>([])
 const loading = ref(true)
 const toast = useToast()
 const { confirm } = useConfirm()
+const { t, locale } = useI18n()
 
 onMounted(async () => {
   try {
     const result = await payment.getMyOrders({ page: 1, page_size: 50 })
     orders.value = result.items
   } catch {
-    toast.error('Failed to load orders')
+    toast.error(t('orders.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -23,8 +25,8 @@ onMounted(async () => {
 
 async function handleRefund(order: payment.PaymentOrder) {
   const confirmed = await confirm({
-    title: 'Request Refund',
-    message: `Are you sure you want to request a refund for order ${order.out_trade_no} ($${order.amount.toFixed(2)})?`,
+    title: t('orders.refundConfirmTitle'),
+    message: t('orders.refundConfirmMsg', { id: order.out_trade_no, amount: order.amount.toFixed(2) }),
     variant: 'danger',
   })
   if (!confirmed) return
@@ -33,17 +35,17 @@ async function handleRefund(order: payment.PaymentOrder) {
     // Optimistic: server may async-process; reflect immediately and re-fetch.
     const idx = orders.value.findIndex((o) => o.id === order.id)
     if (idx !== -1) orders.value[idx] = { ...orders.value[idx], status: 'refunded' }
-    toast.success('Refund request submitted')
+    toast.success(t('orders.refundOk'))
     const result = await payment.getMyOrders({ page: 1, page_size: 50 })
     orders.value = result.items
   } catch {
-    toast.error('Refund request failed')
+    toast.error(t('orders.refundFail'))
   }
 }
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('zh-CN', {
+  return new Date(iso).toLocaleDateString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -59,13 +61,23 @@ function statusVariant(status: payment.PaymentOrder['status']): BadgeVariant {
   return 'red'
 }
 
-function formatType(type: string) {
-  const map: Record<string, string> = {
-    subscription: 'Subscription',
-    recharge: 'Top-up',
-    topup: 'Top-up',
+function localizedStatus(status: payment.PaymentOrder['status']): string {
+  const map: Record<payment.PaymentOrder['status'], string> = {
+    pending: t('common.status.pending'),
+    paid: t('common.status.paid'),
+    completed: t('common.status.completed'),
+    cancelled: t('common.status.cancelled'),
+    refunded: t('common.status.refunded'),
+    expired: t('common.status.expired'),
+    failed: t('common.status.failed'),
   }
-  return map[type] || type
+  return map[status] ?? status
+}
+
+function formatType(type: string) {
+  if (type === 'subscription') return t('orders.type.subscription')
+  if (type === 'recharge' || type === 'topup') return t('orders.type.recharge')
+  return type
 }
 
 function formatMethod(order: payment.PaymentOrder) {
@@ -81,8 +93,8 @@ function canRefund(status: payment.PaymentOrder['status']): boolean {
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">ORDERS</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Order history</h1>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('orders.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('orders.title') }}</h1>
     </div>
 
     <!-- Loading -->
@@ -92,23 +104,21 @@ function canRefund(status: payment.PaymentOrder['status']): boolean {
 
     <!-- Empty -->
     <div v-else-if="orders.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center space-y-2">
-      <p class="text-base font-medium">No orders yet</p>
-      <p class="text-sm text-muted-fg">
-        Once you top up your balance or subscribe to a plan, the orders will show up here.
-      </p>
+      <p class="text-base font-medium">{{ t('orders.empty') }}</p>
+      <p class="text-sm text-muted-fg">{{ t('orders.emptyBody') }}</p>
     </div>
 
     <!-- Table -->
     <UiTable v-else>
       <thead>
         <tr class="border-b border-border">
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Order ID</th>
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Type</th>
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Amount</th>
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Status</th>
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Method</th>
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Date</th>
-          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">Actions</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.id') }}</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.type') }}</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.amount') }}</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.status') }}</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.method') }}</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.date') }}</th>
+          <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">{{ t('orders.cols.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -117,13 +127,13 @@ function canRefund(status: payment.PaymentOrder['status']): boolean {
           <td class="px-4 py-3 text-sm">{{ formatType(order.type) }}</td>
           <td class="px-4 py-3 font-mono text-sm tabular-nums">${{ order.amount.toFixed(2) }}</td>
           <td class="px-4 py-3">
-            <UiBadge :variant="statusVariant(order.status)">{{ order.status }}</UiBadge>
+            <UiBadge :variant="statusVariant(order.status)">{{ localizedStatus(order.status) }}</UiBadge>
           </td>
           <td class="px-4 py-3 text-sm">{{ formatMethod(order) }}</td>
           <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(order.created_at) }}</td>
           <td class="px-4 py-3">
             <UiButton v-if="canRefund(order.status)" variant="ghost" size="sm" class="text-destructive" @click="handleRefund(order)">
-              Refund
+              {{ t('orders.refund') }}
             </UiButton>
           </td>
         </tr>

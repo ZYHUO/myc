@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { useThemeStore } from '@/stores/theme'
 import { useSidebar } from '@/composables'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
-const themeStore = useThemeStore()
 const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebar()
 </script>
 
@@ -25,12 +23,9 @@ const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebar()
 
     <!-- Main area -->
     <div class="flex flex-1 flex-col overflow-hidden">
-      <AppHeader
-        @toggle-sidebar="toggleSidebar"
-        @toggle-theme="themeStore.toggle()"
-      />
+      <AppHeader @toggle-sidebar="toggleSidebar" />
 
-      <main class="flex-1 overflow-y-auto p-6">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6">
         <slot />
       </main>
     </div>

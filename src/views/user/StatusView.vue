@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiCard, UiBadge, UiSkeleton } from '@/components/ui'
 import { getChannelMonitors } from '@/api/channels'
 import type { ChannelMonitor } from '@/api/channels'
@@ -8,6 +9,7 @@ const monitors = ref<ChannelMonitor[]>([])
 const loading = ref(true)
 const lastRefresh = ref<Date>(new Date())
 const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const { t, locale } = useI18n()
 
 async function fetchMonitors() {
   try {
@@ -36,9 +38,9 @@ function statusBadgeVariant(s: ChannelMonitor['status']): 'green' | 'amber' | 'r
 }
 
 function statusLabel(s: ChannelMonitor['status']): string {
-  if (s === 'healthy') return 'Healthy'
-  if (s === 'degraded') return 'Degraded'
-  return 'Down'
+  if (s === 'healthy') return t('common.status.healthy')
+  if (s === 'degraded') return t('common.status.degraded')
+  return t('common.status.down')
 }
 
 function uptimeSegmentColor(s: 'up' | 'down' | 'degraded'): string {
@@ -48,7 +50,7 @@ function uptimeSegmentColor(s: 'up' | 'down' | 'degraded'): string {
 }
 
 function formatRefreshTime(d: Date): string {
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return d.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 </script>
 
@@ -56,18 +58,16 @@ function formatRefreshTime(d: Date): string {
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">MONITORING</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Channel status</h1>
-      <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">
-        Real-time health monitoring across all API channels.
-      </p>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('status.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('status.title') }}</h1>
+      <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">{{ t('status.subtitle') }}</p>
       <!-- Auto-refresh indicator -->
       <div class="flex items-center gap-2 mt-3">
         <span class="relative flex h-2 w-2">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2 w-2 bg-green"></span>
         </span>
-        <span class="text-xs text-muted-fg">Auto-refreshing · Last updated {{ formatRefreshTime(lastRefresh) }}</span>
+        <span class="text-xs text-muted-fg">{{ formatRefreshTime(lastRefresh) }}</span>
       </div>
     </div>
 
@@ -80,22 +80,27 @@ function formatRefreshTime(d: Date): string {
       </div>
     </div>
 
+    <!-- Empty -->
+    <div v-else-if="monitors.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-fg">
+      {{ t('status.empty') }}
+    </div>
+
     <!-- Monitor Grid -->
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <UiCard v-for="(m, idx) in monitors" :key="m.id" class="card-hover stagger-item" :style="{ animationDelay: `${idx * 80}ms` }">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-medium">{{ m.name }}</h3>
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-lg font-medium truncate">{{ m.name }}</h3>
           <UiBadge :variant="statusBadgeVariant(m.status)">{{ statusLabel(m.status) }}</UiBadge>
         </div>
 
         <div class="flex items-end gap-8 mt-4">
           <div>
             <p class="text-3xl font-light tracking-tight tabular-nums">{{ m.availability }}%</p>
-            <p class="text-[11px] uppercase tracking-[0.18em] text-muted-fg mt-2">Availability</p>
+            <p class="text-[11px] uppercase tracking-[0.18em] text-muted-fg mt-2">{{ t('status.availability') }}</p>
           </div>
           <div>
             <p class="font-mono text-lg text-muted-fg">{{ m.latency }}ms</p>
-            <p class="text-[11px] uppercase tracking-[0.18em] text-muted-fg mt-2">Latency</p>
+            <p class="text-[11px] uppercase tracking-[0.18em] text-muted-fg mt-2">{{ t('status.latency') }}</p>
           </div>
         </div>
 

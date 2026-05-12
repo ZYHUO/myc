@@ -2,8 +2,13 @@ import { createApp } from "vue"
 import { createPinia } from "pinia"
 import router from "./router"
 import { i18n } from "./i18n"
+import { applyInitialTheme } from "./stores/theme"
 import App from "./App.vue"
 import "./style.css"
+
+// Sync the .dark class on <html> before mount so dark-preferring users
+// don't see a flash of light theme.
+applyInitialTheme()
 
 const app = createApp(App)
 app.use(createPinia())

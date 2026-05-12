@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiCard, UiBadge, UiButton, UiProgressBar } from '@/components/ui'
 import type { BadgeVariant } from '@/components/ui'
 import { useToast } from '@/composables'
 import { getSubscriptions, type Subscription } from '@/api/subscriptions'
 import { useAuthStore } from '@/stores/auth'
-import { isMockMode } from '@/api/_util'
 
 const subscriptions = ref<Subscription[]>([])
 const loading = ref(true)
 const toast = useToast()
 const auth = useAuthStore()
+const { t, locale } = useI18n()
 
 const balance = computed(() => auth.user?.balance ?? 0)
 
@@ -18,15 +19,22 @@ onMounted(async () => {
   try {
     subscriptions.value = await getSubscriptions()
   } catch {
-    toast.error('Failed to load subscriptions')
+    toast.error(t('subscriptions.loadFailed'))
   } finally {
     loading.value = false
   }
 })
 
 function formatDate(iso: string): string {
-  if (!iso) return '--'
-  return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function localizedStatus(status: string): string {
+  if (status === 'active') return t('common.status.active')
+  if (status === 'expired') return t('common.status.expired')
+  if (status === 'paused') return t('common.status.paused')
+  return status
 }
 
 function daysUntil(iso: string): number {
@@ -70,8 +78,9 @@ function progressColor(percent: number): string {
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">SUBSCRIPTIONS</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Your subscriptions</h1>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('subscriptions.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('subscriptions.title') }}</h1>
+      <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">{{ t('subscriptions.subtitle') }}</p>
     </div>
 
     <!-- Loading -->
@@ -82,27 +91,21 @@ function progressColor(percent: number): string {
     <template v-else>
       <!-- Balance Card -->
       <UiCard flat class="relative overflow-hidden">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">ACCOUNT BALANCE</p>
-            <p class="mt-2 text-4xl font-display font-normal tracking-tight tabular-nums">
-              ${{ balance.toFixed(2) }}
-            </p>
-            <p class="mt-1 text-sm text-muted-fg">
-              Pay-as-you-go balance · Deducted per request
-            </p>
+            <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('dashboard.cards.balance') }}</p>
+            <p class="mt-2 text-4xl font-display font-normal tracking-tight tabular-nums">${{ balance.toFixed(2) }}</p>
           </div>
           <RouterLink to="/purchase">
-            <UiButton variant="primary">Top Up</UiButton>
+            <UiButton variant="primary">{{ t('dashboard.quickActions.purchase') }}</UiButton>
           </RouterLink>
         </div>
-        <!-- Decorative -->
         <div class="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/5" />
       </UiCard>
 
       <!-- Subscription Cards -->
       <div v-if="subscriptions.length > 0" class="space-y-4">
-        <h2 class="text-xl font-display tracking-tight">Assigned Subscriptions</h2>
+        <h2 class="text-xl font-display tracking-tight">{{ t('subscriptions.title') }}</h2>
         
         <UiCard v-for="(sub, idx) in subscriptions" :key="sub.id" flat class="card-hover stagger-item" :style="{ animationDelay: `${idx * 80}ms` }">
           <div class="flex items-start justify-between">
@@ -114,24 +117,24 @@ function progressColor(percent: number): string {
               </div>
               <p class="text-sm text-muted-fg">
                 <template v-if="daysUntil(sub.expires_at) > 0">
-                  Expires in {{ daysUntil(sub.expires_at) }} days ({{ formatDate(sub.expires_at) }})
+                  {{ t('subscriptions.expires', { date: formatDate(sub.expires_at) }) }}
                 </template>
                 <template v-else>
-                  Expired
+                  {{ t('subscriptions.expired', { date: formatDate(sub.expires_at) }) }}
                 </template>
               </p>
             </div>
             <UiBadge :variant="statusVariant(sub.status)">
-              {{ sub.status }}
+              {{ localizedStatus(sub.status) }}
             </UiBadge>
           </div>
 
           <!-- Usage Limits -->
-          <div class="mt-5 grid grid-cols-3 gap-4">
+          <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <!-- Daily -->
             <div class="space-y-2">
               <div class="flex items-center justify-between text-xs">
-                <span class="text-muted-fg uppercase tracking-wider">Daily</span>
+                <span class="text-muted-fg uppercase tracking-wider">{{ t('subscriptions.daily') }}</span>
                 <span class="tabular-nums font-mono">
                   {{ formatUSD(sub.daily_usage_usd) }}
                   <template v-if="sub.daily_limit_usd > 0"> / {{ formatUSD(sub.daily_limit_usd) }}</template>
@@ -147,7 +150,7 @@ function progressColor(percent: number): string {
             <!-- Weekly -->
             <div class="space-y-2">
               <div class="flex items-center justify-between text-xs">
-                <span class="text-muted-fg uppercase tracking-wider">Weekly</span>
+                <span class="text-muted-fg uppercase tracking-wider">{{ t('subscriptions.weekly') }}</span>
                 <span class="tabular-nums font-mono">
                   {{ formatUSD(sub.weekly_usage_usd) }}
                   <template v-if="sub.weekly_limit_usd > 0"> / {{ formatUSD(sub.weekly_limit_usd) }}</template>
@@ -163,7 +166,7 @@ function progressColor(percent: number): string {
             <!-- Monthly -->
             <div class="space-y-2">
               <div class="flex items-center justify-between text-xs">
-                <span class="text-muted-fg uppercase tracking-wider">Monthly</span>
+                <span class="text-muted-fg uppercase tracking-wider">{{ t('subscriptions.monthly') }}</span>
                 <span class="tabular-nums font-mono">
                   {{ formatUSD(sub.monthly_usage_usd) }}
                   <template v-if="sub.monthly_limit_usd > 0"> / {{ formatUSD(sub.monthly_limit_usd) }}</template>
@@ -179,29 +182,14 @@ function progressColor(percent: number): string {
 
           <!-- Features -->
           <div class="mt-4 flex items-center gap-3 text-xs text-muted-fg">
-            <span v-if="sub.allow_image_generation">🖼️ Image gen</span>
-            <span v-if="sub.rpm_limit > 0">⏱️ {{ sub.rpm_limit }} RPM</span>
-            <span v-else>⏱️ Unlimited RPM</span>
+            <span v-if="sub.rpm_limit > 0">{{ sub.rpm_limit }} RPM</span>
           </div>
         </UiCard>
       </div>
 
       <!-- Empty state -->
-      <div v-if="subscriptions.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center space-y-4">
-        <p class="text-lg font-medium">No subscriptions assigned</p>
-        <p class="text-sm text-muted-fg">
-          You're using pay-as-you-go from your balance (${{ balance.toFixed(2) }}).
-          <br>Contact admin to get a subscription for higher limits.
-        </p>
-      </div>
-
-      <!-- Summary -->
-      <div class="rounded-xl border border-dashed border-border p-8 text-center space-y-4">
-        <p class="text-lg font-medium">Need more?</p>
-        <p class="text-sm text-muted-fg">Top up your balance or browse available plans.</p>
-        <RouterLink to="/purchase">
-          <UiButton variant="primary" size="sm">View Plans</UiButton>
-        </RouterLink>
+      <div v-if="subscriptions.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center space-y-2">
+        <p class="text-lg font-medium">{{ t('subscriptions.empty') }}</p>
       </div>
     </template>
   </div>

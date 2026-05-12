@@ -47,7 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
   const isAuthenticated = computed(() => !!user.value)
 
-  async function login(emailOrUsername: string, password: string) {
+  async function login(emailOrUsername: string, password: string, turnstileToken?: string) {
     if (isMockMode()) {
       await delay(400)
       if (!emailOrUsername || !password) {
@@ -59,11 +59,11 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    // Real API: send email + password
-    const res = await client.post<unknown>('/auth/login', {
-      email: emailOrUsername,
-      password,
-    })
+    // Real API: send email + password (plus turnstile token when the server
+    // has captcha enabled — sub2api's LoginRequest accepts `turnstile_token`).
+    const body: Record<string, string> = { email: emailOrUsername, password }
+    if (turnstileToken) body.turnstile_token = turnstileToken
+    const res = await client.post<unknown>('/auth/login', body)
     applyLoginResponse(unwrap<LoginResponse>(res))
   }
 

@@ -7,6 +7,8 @@ import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables'
 import { UiInput, UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
+import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
+import UiTurnstile from '@/components/ui/UiTurnstile.vue'
 import { isMockMode } from '@/api/_util'
 
 const router = useRouter()
@@ -19,9 +21,14 @@ const { t } = useI18n()
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
+const turnstileToken = ref('')
+const turnstileRef = ref<InstanceType<typeof UiTurnstile> | null>(null)
 
-const showRegister = computed(() => settingsStore.settings.registration_enabled)
-const showPasswordReset = computed(() => settingsStore.settings.password_reset_enabled)
+const settings = computed(() => settingsStore.settings)
+const showRegister = computed(() => settings.value.registration_enabled)
+const showPasswordReset = computed(() => settings.value.password_reset_enabled)
+const turnstileEnabled = computed(() => settings.value.turnstile_enabled)
+const turnstileSiteKey = computed(() => settings.value.turnstile_site_key || '')
 
 onMounted(() => {
   settingsStore.load().catch(() => {
@@ -40,14 +47,19 @@ async function handleSubmit() {
     toast.error(t('auth.login.emailRequired'))
     return
   }
+  if (turnstileEnabled.value && !turnstileToken.value) {
+    toast.error(t('turnstile.pleaseComplete'))
+    return
+  }
   submitting.value = true
   try {
-    await auth.login(email.value.trim(), password.value)
+    await auth.login(email.value.trim(), password.value, turnstileToken.value || undefined)
     toast.success(t('auth.login.success'))
     await router.replace(redirectTarget.value)
   } catch (err) {
     const message = err instanceof Error ? err.message : t('auth.login.failed')
     toast.error(message)
+    if (turnstileEnabled.value) turnstileRef.value?.reset()
   } finally {
     submitting.value = false
   }
@@ -64,10 +76,12 @@ async function handleSubmit() {
         </div>
         <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
       </RouterLink>
-      <UiLanguageSwitcher />
+      <div class="flex items-center gap-1">
+        <UiLanguageSwitcher />
+        <UiThemeSwitcher />
+      </div>
     </header>
 
-    <!-- Card -->
     <main class="flex flex-1 items-center justify-center px-6 py-8">
       <div class="w-full max-w-[420px] animate-fade-in">
         <div>
@@ -100,6 +114,17 @@ async function handleSubmit() {
               type="password"
               placeholder="••••••••"
               autocomplete="current-password"
+            />
+          </div>
+
+          <div v-if="turnstileEnabled" class="pt-1">
+            <UiTurnstile
+              ref="turnstileRef"
+              :sitekey="turnstileSiteKey"
+              :model-value="turnstileToken"
+              @update:model-value="turnstileToken = $event"
+              @expired="turnstileToken = ''"
+              @error="turnstileToken = ''"
             />
           </div>
 

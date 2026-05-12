@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 
 defineProps<{
@@ -13,6 +15,7 @@ const emit = defineEmits<{
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 async function handleLogout() {
   emit('close')
@@ -21,24 +24,27 @@ async function handleLogout() {
 }
 
 interface NavItem {
-  label: string
+  key: string
   to: string
   icon: string
 }
 
+// `key` indexes into `nav.items.*`. The order here is the order in the sidebar.
 const navItems: NavItem[] = [
-  { label: 'Dashboard', to: '/dashboard', icon: 'home' },
-  { label: 'API Keys', to: '/keys', icon: 'key' },
-  { label: 'Usage', to: '/usage', icon: 'bar-chart' },
-  { label: 'Channels', to: '/channels', icon: 'server' },
-  { label: 'Channel Status', to: '/status', icon: 'activity' },
-  { label: 'Subscriptions', to: '/subscriptions', icon: 'package' },
-  { label: 'Purchase', to: '/purchase', icon: 'credit-card' },
-  { label: 'Orders', to: '/orders', icon: 'list' },
-  { label: 'Redeem', to: '/redeem', icon: 'gift' },
-  { label: 'Affiliate', to: '/affiliate', icon: 'users' },
-  { label: 'Profile', to: '/profile', icon: 'user' },
+  { key: 'dashboard', to: '/dashboard', icon: 'home' },
+  { key: 'keys', to: '/keys', icon: 'key' },
+  { key: 'usage', to: '/usage', icon: 'bar-chart' },
+  { key: 'channels', to: '/channels', icon: 'server' },
+  { key: 'status', to: '/status', icon: 'activity' },
+  { key: 'subscriptions', to: '/subscriptions', icon: 'package' },
+  { key: 'purchase', to: '/purchase', icon: 'credit-card' },
+  { key: 'orders', to: '/orders', icon: 'list' },
+  { key: 'redeem', to: '/redeem', icon: 'gift' },
+  { key: 'affiliate', to: '/affiliate', icon: 'users' },
+  { key: 'profile', to: '/profile', icon: 'user' },
 ]
+
+const displayName = computed(() => auth.user?.username || t('nav.guest'))
 </script>
 
 <template>
@@ -64,6 +70,7 @@ const navItems: NavItem[] = [
         :class="{
           'bg-sidebar-accent text-sidebar-accent-fg font-medium': route.path === item.to,
         }"
+        :title="t(`nav.items.${item.key}`)"
         @click="emit('close')"
       >
         <!-- Home -->
@@ -111,7 +118,7 @@ const navItems: NavItem[] = [
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
         </svg>
 
-        <span>{{ item.label }}</span>
+        <span>{{ t(`nav.items.${item.key}`) }}</span>
       </router-link>
     </nav>
 
@@ -122,13 +129,13 @@ const navItems: NavItem[] = [
           {{ auth.user?.username?.charAt(0).toUpperCase() || 'U' }}
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-fg truncate">{{ auth.user?.username || 'Guest' }}</p>
+          <p class="text-sm font-medium text-fg truncate">{{ displayName }}</p>
           <p class="text-xs text-muted-fg tabular-nums">${{ auth.user?.balance?.toFixed(2) ?? '0.00' }}</p>
         </div>
         <button
           type="button"
-          aria-label="Sign out"
-          title="Sign out"
+          :aria-label="t('nav.signOut')"
+          :title="t('nav.signOut')"
           class="shrink-0 flex h-8 w-8 items-center justify-center rounded-md text-muted-fg transition-colors duration-150 hover:bg-sidebar-accent hover:text-fg"
           @click="handleLogout"
         >

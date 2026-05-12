@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiCard, UiButton, UiTable, UiStatusDot, UiBadge, UiCopyButton, UiModal, UiInput } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
 import { getKeys, createKey, deleteKey } from '@/api/keys'
@@ -11,6 +12,7 @@ const keys = ref<ApiKey[]>([])
 const loading = ref(true)
 const toast = useToast()
 const { confirm } = useConfirm()
+const { t } = useI18n()
 
 // Create modal state
 const showCreateModal = ref(false)
@@ -23,7 +25,7 @@ onMounted(async () => {
   try {
     keys.value = await getKeys()
   } catch {
-    toast.error('Failed to load API keys')
+    toast.error(t('common.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -54,19 +56,19 @@ async function loadGroups() {
   }
 }
 
-async function handleDelete(id: string) {
+async function handleDelete(key: ApiKey) {
   const confirmed = await confirm({
-    title: 'Delete API Key',
-    message: 'Are you sure you want to delete this key? This action cannot be undone.',
+    title: t('keys.toast.deleteTitle'),
+    message: t('keys.toast.deleteMsg', { name: key.name || key.id }),
     variant: 'danger',
   })
   if (!confirmed) return
   try {
-    await deleteKey(id)
-    keys.value = keys.value.filter((k) => k.id !== id)
-    toast.success('Key deleted successfully')
+    await deleteKey(key.id)
+    keys.value = keys.value.filter((k) => k.id !== key.id)
+    toast.success(t('keys.toast.deleted'))
   } catch {
-    toast.error('Failed to delete key')
+    toast.error(t('keys.toast.deleteFailed'))
   }
 }
 
@@ -78,7 +80,7 @@ async function openCreateModal() {
 
 async function handleCreate() {
   if (!newKeyName.value.trim()) {
-    toast.error('Please enter a key name')
+    toast.error(t('keys.toast.createFailed'))
     return
   }
   creating.value = true
@@ -90,9 +92,9 @@ async function handleCreate() {
     keys.value.unshift(newKey)
     showCreateModal.value = false
     newKeyName.value = ''
-    toast.success('Key created successfully')
+    toast.success(t('keys.toast.created'))
   } catch {
-    toast.error('Failed to create key')
+    toast.error(t('keys.toast.createFailed'))
   } finally {
     creating.value = false
   }
@@ -108,17 +110,16 @@ function formatDate(iso: string | null): string {
 }
 
 function formatLastUsed(iso: string | null): string {
-  if (!iso) return 'Never'
+  if (!iso) return '—'
   const d = new Date(iso)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
+  const diff = Date.now() - d.getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return t('common.timeAgo.justNow')
+  if (mins < 60) return t('common.timeAgo.minute', { n: mins })
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('common.timeAgo.hour', { n: hours })
   const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return t('common.timeAgo.day', { n: days })
 }
 
 function maskKey(key: string): string {
@@ -130,13 +131,13 @@ function maskKey(key: string): string {
 <template>
   <div class="space-y-10">
     <!-- Header -->
-    <div class="flex items-start justify-between">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
-        <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">API KEYS</p>
-        <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Your keys</h1>
-        <p class="mt-2 text-sm text-muted-fg">{{ keys.length }} key{{ keys.length !== 1 ? 's' : '' }} total</p>
+        <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('keys.eyebrow') }}</p>
+        <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('keys.title') }}</h1>
+        <p class="mt-2 text-sm text-muted-fg">{{ t('keys.subtitle') }}</p>
       </div>
-      <UiButton variant="primary" @click="openCreateModal">Create key</UiButton>
+      <UiButton variant="primary" @click="openCreateModal">{{ t('keys.create') }}</UiButton>
     </div>
 
     <!-- Loading -->
@@ -149,18 +150,18 @@ function maskKey(key: string): string {
       <UiTable>
         <thead>
           <tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.18em] text-muted-fg">
-            <th class="px-4 py-3 font-medium">Name</th>
-            <th class="px-4 py-3 font-medium">Key</th>
-            <th class="px-4 py-3 font-medium">Group</th>
-            <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Last Used</th>
-            <th class="px-4 py-3 font-medium">Created</th>
-            <th class="px-4 py-3 font-medium text-right">Actions</th>
+            <th class="px-4 py-3 font-medium">{{ t('keys.cols.name') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('keys.cols.key') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('keys.cols.group') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('keys.cols.status') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('keys.cols.used') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('keys.cols.created') }}</th>
+            <th class="px-4 py-3 font-medium text-right" />
           </tr>
         </thead>
         <tbody>
           <tr v-for="(key, idx) in keys" :key="key.id" class="border-b border-border last:border-0 row-hover stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
-            <td class="px-4 py-3 text-sm font-medium">{{ key.name || '--' }}</td>
+            <td class="px-4 py-3 text-sm font-medium">{{ key.name || '—' }}</td>
             <td class="px-4 py-3">
               <div class="flex items-center gap-2">
                 <code class="font-mono text-sm text-muted-fg">{{ maskKey(key.key) }}</code>
@@ -177,30 +178,28 @@ function maskKey(key: string): string {
             <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(key.created_at) }}</td>
             <td class="px-4 py-3">
               <div class="flex items-center justify-end gap-1">
-                <UiButton variant="ghost" size="sm" class="text-destructive" @click="handleDelete(key.id)">
-                  Delete
+                <UiButton variant="ghost" size="sm" class="text-destructive" @click="handleDelete(key)">
+                  {{ t('common.actions.delete') }}
                 </UiButton>
               </div>
             </td>
           </tr>
           <tr v-if="keys.length === 0">
-            <td colspan="7" class="px-4 py-12 text-center text-muted-fg text-sm">
-              No API keys yet. Create one to get started.
-            </td>
+            <td colspan="7" class="px-4 py-12 text-center text-muted-fg text-sm">{{ t('keys.empty') }}</td>
           </tr>
         </tbody>
       </UiTable>
     </UiCard>
 
     <!-- Create Key Modal -->
-    <UiModal v-model="showCreateModal" title="Create API Key">
+    <UiModal v-model="showCreateModal" :title="t('keys.modal.createTitle')">
       <div class="space-y-4">
         <div>
-          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">Name</label>
-          <UiInput v-model="newKeyName" placeholder="e.g. Production Key" />
+          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">{{ t('keys.modal.nameLabel') }}</label>
+          <UiInput v-model="newKeyName" :placeholder="t('keys.modal.namePlaceholder')" />
         </div>
         <div>
-          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">Group</label>
+          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">{{ t('keys.modal.groupLabel') }}</label>
           <select
             v-model="newKeyGroupId"
             class="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
@@ -210,9 +209,9 @@ function maskKey(key: string): string {
         </div>
       </div>
       <template #footer>
-        <UiButton variant="secondary" @click="showCreateModal = false">Cancel</UiButton>
+        <UiButton variant="secondary" @click="showCreateModal = false">{{ t('common.cancel') }}</UiButton>
         <UiButton variant="primary" :disabled="creating" @click="handleCreate">
-          {{ creating ? 'Creating...' : 'Create' }}
+          {{ creating ? t('common.loading') : t('keys.modal.submit') }}
         </UiButton>
       </template>
     </UiModal>

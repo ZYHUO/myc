@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { UiCard, UiTable, UiStatusDot, UiInput, UiPagination, UiSkeleton, UiEmptyState } from '@/components/ui'
 import { getUsageLogs, getUsageStats } from '@/api/usage'
 import type { UsageLog, UsageStats } from '@/api/usage'
+
+const { t, locale } = useI18n()
 
 const stats = ref<UsageStats | null>(null)
 const logs = ref<UsageLog[]>([])
@@ -72,7 +75,7 @@ function formatDuration(ms: number): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString('zh-CN', {
+  return new Date(iso).toLocaleString(locale.value, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -81,20 +84,21 @@ function formatTime(iso: string): string {
   })
 }
 
-const statCards = [
-  { get value() { return stats.value ? stats.value.totalRequests.toLocaleString() : '—' }, label: 'Total Requests' },
-  { get value() { return stats.value ? `${(stats.value.totalTokens / 1_000_000).toFixed(1)}M` : '—' }, label: 'Total Tokens' },
-  { get value() { return stats.value ? `¥${stats.value.totalCost.toFixed(2)}` : '—' }, label: 'Total Cost' },
-  { get value() { return stats.value ? formatDuration(stats.value.avgDuration) : '—' }, label: 'Avg Duration' },
-]
+const statCards = computed(() => [
+  { value: stats.value ? stats.value.totalRequests.toLocaleString() : '—', label: t('dashboard.cards.totalRequests') },
+  { value: stats.value ? `${(stats.value.totalTokens / 1_000_000).toFixed(1)}M` : '—', label: t('dashboard.cards.tokensUsed') },
+  { value: stats.value ? `$${stats.value.totalCost.toFixed(2)}` : '—', label: t('usage.cols.cost') },
+  { value: stats.value ? formatDuration(stats.value.avgDuration) : '—', label: t('usage.cols.latency') },
+])
 </script>
 
 <template>
   <div class="space-y-10">
     <!-- Header -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">USAGE</p>
-      <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Usage logs</h1>
+      <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('usage.eyebrow') }}</p>
+      <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('usage.title') }}</h1>
+      <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">{{ t('usage.subtitle') }}</p>
     </div>
 
     <!-- Stat Cards -->
@@ -109,32 +113,32 @@ const statCards = [
     <UiCard flat>
       <div class="flex flex-wrap items-end gap-3">
         <div class="flex flex-col gap-1">
-          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">From</label>
-          <UiInput v-model="dateFrom" type="date" placeholder="Start date" @update:model-value="handleFilterChange" />
+          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.from') }}</label>
+          <UiInput v-model="dateFrom" type="date" @update:model-value="handleFilterChange" />
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">To</label>
-          <UiInput v-model="dateTo" type="date" placeholder="End date" @update:model-value="handleFilterChange" />
+          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.to') }}</label>
+          <UiInput v-model="dateTo" type="date" @update:model-value="handleFilterChange" />
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">Model</label>
+          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.model') }}</label>
           <select
             v-model="modelFilter"
             class="h-10 rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
             @change="handleFilterChange"
           >
-            <option value="">All models</option>
+            <option value="">{{ t('usage.filters.allModels') }}</option>
             <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">Key</label>
+          <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.key') }}</label>
           <select
             v-model="keyFilter"
             class="h-10 rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
             @change="handleFilterChange"
           >
-            <option value="">All keys</option>
+            <option value="">{{ t('usage.filters.allKeys') }}</option>
             <option v-for="k in keyOptions" :key="k" :value="k">{{ k }}</option>
           </select>
         </div>
@@ -152,21 +156,21 @@ const statCards = [
       <!-- Empty state -->
       <UiEmptyState
         v-else-if="filteredLogs.length === 0"
-        title="No results"
-        description="No usage logs match your current filters. Try adjusting your search criteria."
+        :title="t('usage.empty')"
+        :description="t('common.noData')"
       />
       <!-- Table -->
       <UiTable v-else>
         <thead>
           <tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.18em] text-muted-fg">
-            <th class="px-4 py-3 font-medium">Time</th>
-            <th class="px-4 py-3 font-medium">Model</th>
-            <th class="px-4 py-3 font-medium">Key</th>
-            <th class="px-4 py-3 font-medium">Prompt</th>
-            <th class="px-4 py-3 font-medium">Completion</th>
-            <th class="px-4 py-3 font-medium">Cost</th>
-            <th class="px-4 py-3 font-medium">Duration</th>
-            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.time') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.model') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.filters.key') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.inputTokens') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.outputTokens') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.cost') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.latency') }}</th>
+            <th class="px-4 py-3 font-medium">{{ t('usage.cols.status') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -176,7 +180,7 @@ const statCards = [
             <td class="px-4 py-3 text-sm text-muted-fg">{{ log.keyName }}</td>
             <td class="px-4 py-3 font-mono text-sm">{{ log.promptTokens.toLocaleString() }}</td>
             <td class="px-4 py-3 font-mono text-sm">{{ log.completionTokens.toLocaleString() }}</td>
-            <td class="px-4 py-3 font-mono text-sm">¥{{ log.cost.toFixed(4) }}</td>
+            <td class="px-4 py-3 font-mono text-sm">${{ log.cost.toFixed(4) }}</td>
             <td class="px-4 py-3 font-mono text-sm">{{ formatDuration(log.duration) }}</td>
             <td class="px-4 py-3">
               <UiStatusDot :status="log.status === 'success' ? 'online' : 'offline'" />
