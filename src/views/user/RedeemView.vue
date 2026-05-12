@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import UiInput from '@/components/ui/UiInput.vue'
-import UiButton from '@/components/ui/UiButton.vue'
-import UiBadge from '@/components/ui/UiBadge.vue'
-import UiTable from '@/components/ui/UiTable.vue'
+import { UiInput, UiButton, UiBadge, UiTable } from '@/components/ui'
 import { redeemCode, getRedeemHistory, type RedeemHistory } from '@/api/redeem'
 
 const code = ref('')
@@ -36,6 +33,10 @@ async function handleRedeem() {
   }
 }
 
+function onInputKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') handleRedeem()
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('zh-CN', {
     year: 'numeric',
@@ -64,10 +65,10 @@ function statusVariant(status: string) {
 
     <!-- Redeem Input -->
     <div class="flex gap-3 max-w-xl">
-      <div class="flex-1">
+      <div class="flex-1" @keydown="onInputKeydown">
         <UiInput v-model="code" placeholder="Enter your code" />
       </div>
-      <UiButton variant="primary" size="md" :class="{ 'opacity-50': redeeming }" @click="handleRedeem">
+      <UiButton variant="primary" size="md" :disabled="redeeming" @click="handleRedeem">
         {{ redeeming ? 'Redeeming…' : 'Redeem' }}
       </UiButton>
     </div>

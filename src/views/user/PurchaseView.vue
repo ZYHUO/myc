@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import UiCard from '@/components/ui/UiCard.vue'
-import UiBadge from '@/components/ui/UiBadge.vue'
-import UiButton from '@/components/ui/UiButton.vue'
-import UiInput from '@/components/ui/UiInput.vue'
+import { UiCard, UiBadge, UiButton, UiInput } from '@/components/ui'
+import { useToast, useConfirm } from '@/composables'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const activeTab = ref<'balance' | 'subscriptions'>('balance')
 
 const presetAmounts = [10, 25, 50, 100, 200, 500]
 const selectedAmount = ref(100)
 const customAmount = ref('')
+const paying = ref(false)
 
 const paymentMethods = ['Stripe', 'WeChat Pay', 'USDT'] as const
 type PaymentMethod = (typeof paymentMethods)[number]
@@ -28,6 +30,19 @@ function onCustomAmountInput(val: string) {
 const currentTotal = () => {
   const amt = customAmount.value ? Number(customAmount.value) : selectedAmount.value
   return amt
+}
+
+async function handleProceedToPay() {
+  const confirmed = await confirm({
+    title: 'Confirm Payment',
+    message: `Proceed to pay ¥${currentTotal().toFixed(2)} via ${selectedMethod.value}?`,
+  })
+  if (!confirmed) return
+  paying.value = true
+  setTimeout(() => {
+    paying.value = false
+    toast.success('Payment initiated successfully!')
+  }, 1500)
 }
 
 interface PlanFeature {
@@ -57,6 +72,11 @@ const plans: PlanFeature[] = [
 ]
 
 const selectedPlan = ref<string | null>(null)
+
+function handleSelectPlan(planName: string) {
+  selectedPlan.value = planName
+  toast.success('Plan selected!')
+}
 </script>
 
 <template>
@@ -141,7 +161,9 @@ const selectedPlan = ref<string | null>(null)
           <span class="text-sm text-muted-fg">Total</span>
           <span class="text-2xl font-light tabular-nums font-mono">¥{{ currentTotal().toFixed(2) }}</span>
         </div>
-        <UiButton variant="primary" size="lg" class="w-full">Proceed to Pay</UiButton>
+        <UiButton variant="primary" size="lg" class="w-full" :disabled="paying" @click="handleProceedToPay">
+          {{ paying ? 'Processing…' : 'Proceed to Pay' }}
+        </UiButton>
       </div>
     </div>
 
@@ -172,7 +194,7 @@ const selectedPlan = ref<string | null>(null)
             :variant="plan.popular ? 'primary' : 'secondary'"
             size="md"
             class="w-full"
-            @click="selectedPlan = plan.name"
+            @click="handleSelectPlan(plan.name)"
           >
             {{ selectedPlan === plan.name ? 'Selected' : 'Select' }}
           </UiButton>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 defineProps<{
   open: boolean
@@ -11,6 +12,7 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const auth = useAuthStore()
 
 interface NavItem {
   label: string
@@ -19,11 +21,11 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', to: '/', icon: 'home' },
-  { label: 'API Keys', to: '/api-keys', icon: 'key' },
+  { label: 'Dashboard', to: '/dashboard', icon: 'home' },
+  { label: 'API Keys', to: '/keys', icon: 'key' },
   { label: 'Usage', to: '/usage', icon: 'bar-chart' },
   { label: 'Channels', to: '/channels', icon: 'server' },
-  { label: 'Channel Status', to: '/channel-status', icon: 'activity' },
+  { label: 'Channel Status', to: '/status', icon: 'activity' },
   { label: 'Subscriptions', to: '/subscriptions', icon: 'package' },
   { label: 'Purchase', to: '/purchase', icon: 'credit-card' },
   { label: 'Orders', to: '/orders', icon: 'list' },
@@ -111,11 +113,11 @@ const navItems: NavItem[] = [
     <div class="border-t border-sidebar-border px-4 py-4">
       <div class="flex items-center gap-3">
         <div class="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-fg">
-          U
+          {{ auth.user?.username?.charAt(0).toUpperCase() || 'U' }}
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-fg truncate">User</p>
-          <p class="text-xs text-muted-fg">$0.00</p>
+          <p class="text-sm font-medium text-fg truncate">{{ auth.user?.username || 'Guest' }}</p>
+          <p class="text-xs text-muted-fg">¥{{ auth.user?.balance?.toFixed(2) ?? '0.00' }}</p>
         </div>
       </div>
     </div>

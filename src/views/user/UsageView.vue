@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { UiCard, UiTable, UiStatusDot, UiInput, UiPagination } from '@/components/ui'
+import { ref, computed, onMounted } from 'vue'
+import { UiCard, UiTable, UiStatusDot, UiInput, UiPagination, UiSkeleton, UiEmptyState } from '@/components/ui'
 import { getUsageLogs, getUsageStats } from '@/api/usage'
 import type { UsageLog, UsageStats } from '@/api/usage'
 
@@ -9,6 +9,7 @@ const logs = ref<UsageLog[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
+const loading = ref(true)
 
 const dateFrom = ref('')
 const dateTo = ref('')
@@ -18,14 +19,34 @@ const keyFilter = ref('')
 const modelOptions = ['claude-sonnet-4', 'gpt-4o', 'gemini-2.5-pro', 'deepseek-v3', 'gpt-4o-mini', 'claude-haiku-3.5']
 const keyOptions = ['生产环境-主密钥', '测试环境', 'Claude 专用', 'GPT-4o 测试']
 
+const filteredLogs = computed(() => {
+  let result = logs.value
+  if (keyFilter.value) {
+    result = result.filter((l) => l.keyName === keyFilter.value)
+  }
+  if (dateFrom.value) {
+    result = result.filter((l) => new Date(l.time) >= new Date(dateFrom.value))
+  }
+  if (dateTo.value) {
+    const to = new Date(dateTo.value)
+    to.setHours(23, 59, 59, 999)
+    result = result.filter((l) => new Date(l.time) <= to)
+  }
+  return result
+})
+
 async function fetchData() {
+  loading.value = true
   const result = await getUsageLogs({
     page: page.value,
     pageSize,
     model: modelFilter.value || undefined,
+    dateFrom: dateFrom.value || undefined,
+    dateTo: dateTo.value || undefined,
   })
   logs.value = result.data
   total.value = result.total
+  loading.value = false
 }
 
 onMounted(async () => {
@@ -35,6 +56,11 @@ onMounted(async () => {
 
 function handlePageChange(p: number) {
   page.value = p
+  fetchData()
+}
+
+function handleFilterChange() {
+  page.value = 1
   fetchData()
 }
 
@@ -81,18 +107,18 @@ const statCards = [
       <div class="flex flex-wrap items-end gap-3">
         <div class="flex flex-col gap-1">
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">From</label>
-          <UiInput v-model="dateFrom" type="date" placeholder="Start date" />
+          <UiInput v-model="dateFrom" type="date" placeholder="Start date" @update:model-value="handleFilterChange" />
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">To</label>
-          <UiInput v-model="dateTo" type="date" placeholder="End date" />
+          <UiInput v-model="dateTo" type="date" placeholder="End date" @update:model-value="handleFilterChange" />
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">Model</label>
           <select
             v-model="modelFilter"
             class="h-10 rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
-            @change="fetchData"
+            @change="handleFilterChange"
           >
             <option value="">All models</option>
             <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
@@ -103,6 +129,7 @@ const statCards = [
           <select
             v-model="keyFilter"
             class="h-10 rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
+            @change="handleFilterChange"
           >
             <option value="">All keys</option>
             <option v-for="k in keyOptions" :key="k" :value="k">{{ k }}</option>
@@ -113,7 +140,20 @@ const statCards = [
 
     <!-- Usage Table -->
     <UiCard flat>
-      <UiTable>
+      <!-- Skeleton loading -->
+      <template v-if="loading">
+        <div class="space-y-3 p-4">
+          <UiSkeleton v-for="i in 8" :key="i" width="100%" height="40px" class="rounded-md" />
+        </div>
+      </template>
+      <!-- Empty state -->
+      <UiEmptyState
+        v-else-if="filteredLogs.length === 0"
+        title="No results"
+        description="No usage logs match your current filters. Try adjusting your search criteria."
+      />
+      <!-- Table -->
+      <UiTable v-else>
         <thead>
           <tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.18em] text-muted-fg">
             <th class="px-4 py-3 font-medium">Time</th>
@@ -127,7 +167,7 @@ const statCards = [
           </tr>
         </thead>
         <tbody>
-          <tr v-for="log in logs" :key="log.id" class="border-b border-border last:border-0">
+          <tr v-for="(log, idx) in filteredLogs" :key="log.id" class="border-b border-border last:border-0 row-hover stagger-item" :style="{ animationDelay: `${idx * 40}ms` }">
             <td class="px-4 py-3 font-mono text-muted-fg text-sm">{{ formatTime(log.time) }}</td>
             <td class="px-4 py-3 text-sm">{{ log.model }}</td>
             <td class="px-4 py-3 text-sm text-muted-fg">{{ log.keyName }}</td>
@@ -145,6 +185,7 @@ const statCards = [
 
     <!-- Pagination -->
     <UiPagination
+      v-if="!loading && filteredLogs.length > 0"
       :current="page"
       :total="total"
       :page-size="pageSize"

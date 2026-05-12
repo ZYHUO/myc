@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import UiCard from '@/components/ui/UiCard.vue'
-import UiButton from '@/components/ui/UiButton.vue'
-import UiCopyButton from '@/components/ui/UiCopyButton.vue'
-import UiTable from '@/components/ui/UiTable.vue'
+import { UiCard, UiButton, UiCopyButton, UiTable } from '@/components/ui'
+import { useToast, useConfirm } from '@/composables'
 import { getAffiliateStats, getAffiliateActivity, getReferralLink, type AffiliateStats, type AffiliateActivity } from '@/api/affiliate'
 
 const stats = ref<AffiliateStats>({ totalReferrals: 0, availableRebate: 0, totalEarned: 0 })
 const activity = ref<AffiliateActivity[]>([])
 const referralLink = ref('')
 const loading = ref(true)
+const transferring = ref(false)
+const toast = useToast()
+const { confirm } = useConfirm()
 
 onMounted(async () => {
   const [s, a, l] = await Promise.all([
@@ -22,6 +23,25 @@ onMounted(async () => {
   referralLink.value = l
   loading.value = false
 })
+
+async function handleTransfer() {
+  if (stats.value.availableRebate <= 0) {
+    toast.warning('No rebate available to transfer')
+    return
+  }
+  const confirmed = await confirm({
+    title: 'Transfer to Balance',
+    message: `Transfer ¥${stats.value.availableRebate.toFixed(2)} from affiliate rebate to your account balance?`,
+  })
+  if (!confirmed) return
+  transferring.value = true
+  setTimeout(() => {
+    const amount = stats.value.availableRebate
+    stats.value.availableRebate = 0
+    transferring.value = false
+    toast.success(`¥${amount.toFixed(2)} transferred to balance`)
+  }, 1000)
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('zh-CN', {
@@ -93,7 +113,7 @@ const statCards = [
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in activity" :key="item.user" class="border-b border-border last:border-0">
+            <tr v-for="(item, idx) in activity" :key="item.user" class="border-b border-border last:border-0 stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
               <td class="px-4 py-3 text-sm">{{ item.user }}</td>
               <td class="px-4 py-3 text-sm text-muted-fg">{{ formatDate(item.joinedAt) }}</td>
               <td class="px-4 py-3 font-mono text-sm tabular-nums">¥{{ item.rebate.toFixed(2) }}</td>
@@ -104,7 +124,9 @@ const statCards = [
 
       <!-- Transfer Button -->
       <div>
-        <UiButton variant="secondary">Transfer to Balance</UiButton>
+        <UiButton variant="secondary" :disabled="transferring" @click="handleTransfer">
+          {{ transferring ? 'Transferring…' : 'Transfer to Balance' }}
+        </UiButton>
       </div>
     </template>
   </div>

@@ -1,17 +1,29 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import UiTable from '@/components/ui/UiTable.vue'
-import UiBadge from '@/components/ui/UiBadge.vue'
-import UiButton from '@/components/ui/UiButton.vue'
+import { UiTable, UiBadge, UiButton } from '@/components/ui'
+import { useToast, useConfirm } from '@/composables'
 import { getOrders, type Order } from '@/api/orders'
 
 const orders = ref<Order[]>([])
 const loading = ref(true)
+const toast = useToast()
+const { confirm } = useConfirm()
 
 onMounted(async () => {
   orders.value = await getOrders()
   loading.value = false
 })
+
+async function handleRefund(order: Order) {
+  const confirmed = await confirm({
+    title: 'Request Refund',
+    message: `Are you sure you want to request a refund for order ${order.id} (¥${order.amount.toFixed(2)})?`,
+    variant: 'danger',
+  })
+  if (!confirmed) return
+  order.status = 'refunded'
+  toast.success('Refund request submitted successfully')
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('zh-CN', {
@@ -77,7 +89,7 @@ function formatMethod(method: string) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="order in orders" :key="order.id" class="border-b border-border last:border-0">
+        <tr v-for="order in orders" :key="order.id" class="border-b border-border last:border-0 row-hover">
           <td class="px-4 py-3 font-mono text-sm">{{ order.id }}</td>
           <td class="px-4 py-3 text-sm">{{ formatType(order.type) }}</td>
           <td class="px-4 py-3 font-mono text-sm tabular-nums">¥{{ order.amount.toFixed(2) }}</td>
@@ -87,7 +99,9 @@ function formatMethod(method: string) {
           <td class="px-4 py-3 text-sm">{{ formatMethod(order.paymentMethod) }}</td>
           <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(order.createdAt) }}</td>
           <td class="px-4 py-3">
-            <UiButton v-if="order.status === 'completed'" variant="ghost" size="sm">Refund</UiButton>
+            <UiButton v-if="order.status === 'completed'" variant="ghost" size="sm" class="text-destructive" @click="handleRefund(order)">
+              Refund
+            </UiButton>
           </td>
         </tr>
       </tbody>

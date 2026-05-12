@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { UiCard, UiStatusDot } from '@/components/ui'
+import { UiCard, UiStatusDot, UiSkeleton } from '@/components/ui'
 import { getChannels } from '@/api/channels'
 import type { Channel } from '@/api/channels'
 
 const channels = ref<Channel[]>([])
+const loading = ref(true)
 
 onMounted(async () => {
   channels.value = await getChannels()
+  loading.value = false
 })
 
 function statusToDot(s: Channel['status']): 'online' | 'degraded' | 'offline' {
@@ -26,9 +28,20 @@ function statusToDot(s: Channel['status']): 'online' | 'degraded' | 'offline' {
       </p>
     </div>
 
+    <!-- Skeleton Loading -->
+    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div v-for="i in 4" :key="i" class="rounded-xl border border-border bg-card p-6 space-y-4">
+        <UiSkeleton width="60%" height="24px" />
+        <div class="flex gap-2">
+          <UiSkeleton v-for="j in 3" :key="j" width="80px" height="28px" class="rounded-md" />
+        </div>
+        <UiSkeleton width="40%" height="16px" />
+      </div>
+    </div>
+
     <!-- Channel Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <UiCard v-for="ch in channels" :key="ch.id">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <UiCard v-for="(ch, idx) in channels" :key="ch.id" class="card-hover stagger-item" :style="{ animationDelay: `${idx * 80}ms` }">
         <div class="flex items-center gap-3">
           <h3 class="text-xl font-medium">{{ ch.name }}</h3>
           <UiStatusDot :status="statusToDot(ch.status)" />

@@ -1,16 +1,24 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { UiCard, UiButton, UiTable, UiStatusDot } from '@/components/ui'
+import { UiCard, UiButton, UiTable, UiStatusDot, UiSkeleton } from '@/components/ui'
+import { useCountUp } from '@/composables'
 
 const router = useRouter()
 const auth = useAuthStore()
+const loading = ref(true)
+
+const animatedKeys = useCountUp(7)
+const animatedRequests = useCountUp(12847)
+const animatedTokens = useCountUp(3200)
+const animatedBalance = useCountUp(Math.round((auth.user?.balance ?? 128.50) * 100))
 
 const stats = [
-  { value: '7', label: 'Total Keys' },
-  { value: '12,847', label: 'Total Requests' },
-  { value: '3.2M', label: 'Tokens Used' },
-  { value: `¥${auth.user?.balance?.toFixed(2) ?? '128.50'}`, label: 'Balance' },
+  { get value() { return String(animatedKeys.value) }, label: 'Total Keys' },
+  { get value() { return animatedRequests.value.toLocaleString() }, label: 'Total Requests' },
+  { get value() { return `${(animatedTokens.value / 1000).toFixed(1)}M` }, label: 'Tokens Used' },
+  { get value() { return `¥${(animatedBalance.value / 100).toFixed(2)}` }, label: 'Balance' },
 ]
 
 const barHeights = [35, 52, 68, 45, 80, 62, 90, 73, 55, 85, 48, 70]
@@ -22,6 +30,10 @@ const recentUsage = [
   { time: '18 min ago', model: 'deepseek-v3', tokens: '890', cost: '¥0.009', status: 'offline' as const },
   { time: '25 min ago', model: 'gpt-4o-mini', tokens: '3,560', cost: '¥0.011', status: 'online' as const },
 ]
+
+onMounted(() => {
+  setTimeout(() => { loading.value = false }, 600)
+})
 </script>
 
 <template>
@@ -39,7 +51,10 @@ const recentUsage = [
 
     <!-- Stat Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-      <UiCard v-for="stat in stats" :key="stat.label">
+      <template v-if="loading">
+        <UiSkeleton v-for="i in 4" :key="i" width="100%" height="120px" class="rounded-xl" />
+      </template>
+      <UiCard v-for="(stat, idx) in stats" v-else :key="stat.label" class="card-hover stagger-item" :style="{ animationDelay: `${idx * 80}ms` }">
         <p class="text-4xl font-light tracking-tight tabular-nums font-mono">{{ stat.value }}</p>
         <p class="text-[11px] uppercase tracking-[0.18em] text-muted-fg mt-2">{{ stat.label }}</p>
       </UiCard>
@@ -88,7 +103,7 @@ const recentUsage = [
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in recentUsage" :key="row.time" class="border-b border-border last:border-0">
+          <tr v-for="(row, idx) in recentUsage" :key="row.time" class="border-b border-border last:border-0 row-hover stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
             <td class="px-4 py-3 font-mono text-muted-fg text-sm">{{ row.time }}</td>
             <td class="px-4 py-3 text-sm">{{ row.model }}</td>
             <td class="px-4 py-3 font-mono text-sm">{{ row.tokens }}</td>

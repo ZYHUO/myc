@@ -1,18 +1,27 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import UiCard from '@/components/ui/UiCard.vue'
-import UiBadge from '@/components/ui/UiBadge.vue'
-import UiButton from '@/components/ui/UiButton.vue'
-import UiProgressBar from '@/components/ui/UiProgressBar.vue'
+import { UiCard, UiBadge, UiButton, UiProgressBar } from '@/components/ui'
+import { useToast, useConfirm } from '@/composables'
 import { getSubscriptions, type Subscription } from '@/api/subscriptions'
 
 const subscriptions = ref<Subscription[]>([])
 const loading = ref(true)
+const toast = useToast()
+const { confirm } = useConfirm()
 
 onMounted(async () => {
   subscriptions.value = await getSubscriptions()
   loading.value = false
 })
+
+async function handleRenew(sub: Subscription) {
+  const confirmed = await confirm({
+    title: 'Renew Subscription',
+    message: `Renew "${sub.name}" subscription? This will use your account balance.`,
+  })
+  if (!confirmed) return
+  toast.success(`"${sub.name}" renewed successfully!`)
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -40,7 +49,7 @@ function statusVariant(status: string) {
 
     <!-- Subscription Cards -->
     <div v-else class="space-y-4">
-      <UiCard v-for="sub in subscriptions" :key="sub.id">
+      <UiCard v-for="(sub, idx) in subscriptions" :key="sub.id" class="card-hover stagger-item" :style="{ animationDelay: `${idx * 80}ms` }">
         <div class="flex items-start justify-between">
           <div class="space-y-1">
             <p class="text-lg font-medium">{{ sub.name }}</p>
@@ -65,7 +74,7 @@ function statusVariant(status: string) {
         </div>
 
         <div v-if="sub.status === 'active'" class="mt-5">
-          <UiButton variant="secondary" size="sm">Renew</UiButton>
+          <UiButton variant="secondary" size="sm" @click="handleRenew(sub)">Renew</UiButton>
         </div>
       </UiCard>
 

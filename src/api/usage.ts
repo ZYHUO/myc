@@ -66,11 +66,21 @@ export async function getUsageLogs(params?: {
   page?: number
   pageSize?: number
   model?: string
+  dateFrom?: string
+  dateTo?: string
 }): Promise<{ data: UsageLog[]; total: number }> {
   await delay()
   let logs = [...MOCK_LOGS]
   if (params?.model) {
     logs = logs.filter((l) => l.model === params.model)
+  }
+  if (params?.dateFrom) {
+    logs = logs.filter((l) => new Date(l.time) >= new Date(params.dateFrom!))
+  }
+  if (params?.dateTo) {
+    const to = new Date(params.dateTo!)
+    to.setHours(23, 59, 59, 999)
+    logs = logs.filter((l) => new Date(l.time) <= to)
   }
   const total = logs.length
   const page = params?.page || 1
