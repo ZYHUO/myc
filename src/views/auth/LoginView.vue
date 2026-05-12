@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables'
 import { UiInput, UiButton } from '@/components/ui'
 import { isMockMode } from '@/api/_util'
@@ -9,11 +10,21 @@ import { isMockMode } from '@/api/_util'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const settingsStore = useSettingsStore()
 const toast = useToast()
 
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
+
+const showRegister = computed(() => settingsStore.settings.registration_enabled)
+const showPasswordReset = computed(() => settingsStore.settings.password_reset_enabled)
+
+onMounted(() => {
+  settingsStore.load().catch(() => {
+    // optional; we still render with the default flag values
+  })
+})
 
 const redirectTarget = computed(() => {
   const q = route.query.redirect
@@ -44,12 +55,12 @@ async function handleSubmit() {
   <div class="min-h-screen flex flex-col bg-bg">
     <!-- Brand strip -->
     <header class="px-8 py-6">
-      <div class="flex items-center gap-3">
+      <RouterLink to="/" class="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
         <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
-          S
+          A
         </div>
-        <span class="text-xl font-display text-fg tracking-tight">Sub2API</span>
-      </div>
+        <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
+      </RouterLink>
     </header>
 
     <!-- Card -->
@@ -100,7 +111,15 @@ async function handleSubmit() {
           </UiButton>
         </form>
 
-          <p v-if="isMockMode()" class="mt-6 text-xs text-muted-fg leading-relaxed">
+        <p v-if="showRegister" class="mt-6 text-sm text-muted-fg">
+          New to Amodel?
+          <RouterLink to="/register" class="text-fg font-medium underline ml-1">Create an account</RouterLink>
+        </p>
+        <p v-if="showPasswordReset" class="mt-2 text-xs text-muted-fg">
+          <RouterLink to="/forgot-password" class="underline">Forgot password?</RouterLink>
+        </p>
+
+        <p v-if="isMockMode()" class="mt-6 text-xs text-muted-fg leading-relaxed">
           <span class="inline-block rounded-sm bg-accent px-1.5 py-0.5 font-mono text-[10px] text-accent-fg mr-1">MOCK</span>
           Any non-empty email and password are accepted. Set
           <code class="font-mono text-[11px]">VITE_USE_MOCK=false</code> to use the real backend.
@@ -109,7 +128,7 @@ async function handleSubmit() {
     </main>
 
     <footer class="px-8 py-6 text-xs text-muted-fg">
-      © Sub2API
+      © Amodel
     </footer>
   </div>
 </template>

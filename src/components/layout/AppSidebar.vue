@@ -47,12 +47,12 @@ const navItems: NavItem[] = [
     :class="open ? 'translate-x-0' : '-translate-x-full'"
   >
     <!-- Logo -->
-    <div class="flex h-[80px] items-center gap-3 px-6 border-b border-sidebar-border">
+    <RouterLink to="/" class="flex h-[80px] items-center gap-3 px-6 border-b border-sidebar-border transition-colors hover:bg-sidebar-accent/40">
       <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
-        S
+        A
       </div>
-      <span class="text-xl font-display text-fg tracking-tight">Sub2API</span>
-    </div>
+      <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
+    </RouterLink>
 
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">

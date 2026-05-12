@@ -64,11 +64,13 @@ export const useAuthStore = defineStore('auth', () => {
       email: emailOrUsername,
       password,
     })
+    applyLoginResponse(unwrap<LoginResponse>(res))
+  }
 
-    const payload = unwrap<LoginResponse>(res)
+  /** Maps a sub2api token-pair response into the local user ref + localStorage. */
+  function applyLoginResponse(payload: LoginResponse) {
     localStorage.setItem('token', payload.access_token)
     localStorage.setItem('refresh_token', payload.refresh_token)
-
     const u = payload.user
     user.value = {
       id: String(u.id),
@@ -81,6 +83,59 @@ export const useAuthStore = defineStore('auth', () => {
       concurrency: u.concurrency,
       allowed_groups: u.allowed_groups,
     }
+  }
+
+  /**
+   * Register a new user. The optional fields are only sent when present so the
+   * backend's binding validators don't complain about empty strings; sub2api
+   * decides which fields are actually required via /settings/public flags.
+   */
+  async function register(payload: {
+    email: string
+    password: string
+    verifyCode?: string
+    turnstileToken?: string
+    promoCode?: string
+    invitationCode?: string
+    affCode?: string
+  }) {
+    if (isMockMode()) {
+      await delay(400)
+      const token = MOCK_TOKEN_PREFIX + Math.random().toString(36).slice(2)
+      localStorage.setItem('token', token)
+      user.value = { ...MOCK_USER, email: payload.email, username: payload.email.split('@')[0] }
+      return
+    }
+    const body: Record<string, string> = {
+      email: payload.email,
+      password: payload.password,
+    }
+    if (payload.verifyCode) body.verify_code = payload.verifyCode
+    if (payload.turnstileToken) body.turnstile_token = payload.turnstileToken
+    if (payload.promoCode) body.promo_code = payload.promoCode
+    if (payload.invitationCode) body.invitation_code = payload.invitationCode
+    if (payload.affCode) body.aff_code = payload.affCode
+
+    const res = await client.post<unknown>('/auth/register', body)
+    applyLoginResponse(unwrap<LoginResponse>(res))
+  }
+
+  /**
+   * Request the email verification code that's needed when
+   * `email_verify_enabled` is true on the backend. Returns the countdown
+   * (in seconds) the client should observe before re-sending.
+   */
+  async function sendVerifyCode(email: string, turnstileToken?: string): Promise<number> {
+    if (isMockMode()) {
+      await delay(400)
+      return 60
+    }
+    const res = await client.post<unknown>('/auth/send-verify-code', {
+      email,
+      ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+    })
+    const data = unwrap<{ countdown?: number }>(res)
+    return data.countdown ?? 60
   }
 
   async function logout() {
@@ -131,5 +186,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, isAuthenticated, initialized, login, logout, fetchUser }
+  return { user, isAuthenticated, initialized, login, register, sendVerifyCode, logout, fetchUser }
 })

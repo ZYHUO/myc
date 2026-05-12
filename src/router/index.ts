@@ -3,14 +3,22 @@ import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/',
+    name: 'landing',
+    component: () => import('@/views/LandingView.vue'),
+    meta: { public: true, layout: 'none' },
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('@/views/auth/LoginView.vue'),
-    meta: { public: true, layout: 'none', title: '登录' },
+    meta: { public: true, layout: 'none', title: 'Sign in' },
   },
   {
-    path: '/',
-    redirect: '/dashboard',
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/auth/RegisterView.vue'),
+    meta: { public: true, layout: 'none', title: 'Sign up' },
   },
   {
     path: '/dashboard',
@@ -92,7 +100,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  document.title = to.meta.title ? `${to.meta.title as string} - Sub2API` : 'Sub2API'
+  document.title = to.meta.title ? `${to.meta.title as string} · Amodel` : 'Amodel'
 
   if (to.meta.public) return true
 
