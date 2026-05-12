@@ -49,6 +49,7 @@ export default {
       healthy: '正常',
       degraded: '低下',
       down: '停止',
+      unknown: '未確認',
       online: 'オンライン',
       offline: 'オフライン',
     },

@@ -139,4 +139,19 @@ describe('synthesizeUptime30d', () => {
     const b = synthesizeUptime30d(monitor({ id: 2, availability_7d: 50, availability_15d: 50, availability_30d: 50 }), NOW)
     expect(a).not.toEqual(b)
   })
+
+  it('tolerates null availability_15d / 30d (real sub2api shape)', () => {
+    // The live deployment we tested against only fills availability_7d; the
+    // other two are null. The synthesizer should fall through, not crash.
+    const m = {
+      id: 1,
+      name: 'GPT',
+      availability_7d: 100,
+      availability_15d: null,
+      availability_30d: null,
+      timeline: [],
+    } as unknown as Parameters<typeof synthesizeUptime30d>[0]
+    expect(() => synthesizeUptime30d(m, NOW)).not.toThrow()
+    expect(synthesizeUptime30d(m, NOW).every((s) => s === 'up')).toBe(true)
+  })
 })

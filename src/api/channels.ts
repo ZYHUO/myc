@@ -14,7 +14,13 @@ export interface ChannelMonitor {
   name: string
   availability: number
   latency: number
-  status: 'healthy' | 'degraded' | 'down'
+  /**
+   * `healthy`  → upstream is responding correctly (`operational`)
+   * `degraded` → responding but slow / partially wrong
+   * `down`     → check failed (`failed` / `error`)
+   * `unknown`  → no check has run yet, or upstream returned no state
+   */
+  status: 'healthy' | 'degraded' | 'down' | 'unknown'
   uptimeHistory: ('up' | 'down' | 'degraded')[]
 }
 
@@ -46,10 +52,14 @@ interface UpstreamMonitor {
   group_name?: string
   primary_model?: string
   primary_status?: string
+  /** Real sub2api field; the older `latency_ms` is kept as a fallback. */
+  primary_latency_ms?: number | null
+  primary_ping_latency_ms?: number | null
+  /** Legacy / fork field name. */
   latency_ms?: number | null
-  availability_7d?: number
-  availability_15d?: number
-  availability_30d?: number
+  availability_7d?: number | null
+  availability_15d?: number | null
+  availability_30d?: number | null
   avg_latency_7d_ms?: number | null
   timeline?: UpstreamTimelinePoint[]
   extra_models?: unknown
@@ -176,18 +186,34 @@ export function synthesizeUptime30d(
   return out as ('up' | 'down' | 'degraded')[]
 }
 
-function statusFromPrimary(s: string | undefined): ChannelMonitor['status'] {
-  if (s === 'healthy' || s === 'up') return 'healthy'
+// sub2api's channel-monitor status enum (see backend's
+// service/channel_monitor_const.go). We saw a real deployment ship the
+// value "operational" — the old mapping defaulted that to "down", which
+// is how a channel with 100% availability ended up flagged as a failure
+// in the StatusView.
+function statusFromPrimary(s: string | undefined | null): ChannelMonitor['status'] {
+  if (!s) return 'unknown'
+  // Canonical sub2api values
+  if (s === 'operational') return 'healthy'
   if (s === 'degraded') return 'degraded'
-  return 'down'
+  if (s === 'failed' || s === 'error') return 'down'
+  // Legacy / synonyms we tolerate for forks
+  if (s === 'healthy' || s === 'up' || s === 'ok') return 'healthy'
+  if (s === 'down' || s === 'offline') return 'down'
+  return 'unknown'
 }
 
 function mapMonitor(raw: UpstreamMonitor): ChannelMonitor {
+  // Pick whichever availability number the deployment actually populates.
+  // Most operators only collect 7-day data; 15d and 30d are commonly null.
+  const availability =
+    raw.availability_7d ?? raw.availability_15d ?? raw.availability_30d ?? 0
+  const latencyRaw = raw.primary_latency_ms ?? raw.latency_ms ?? raw.avg_latency_7d_ms ?? 0
   return {
     id: String(raw.id),
     name: raw.name || `Monitor ${raw.id}`,
-    availability: +(raw.availability_7d ?? raw.availability_30d ?? 0).toFixed(2),
-    latency: Math.round(raw.latency_ms ?? raw.avg_latency_7d_ms ?? 0),
+    availability: Number(availability.toFixed(2)),
+    latency: Math.round(latencyRaw ?? 0),
     status: statusFromPrimary(raw.primary_status),
     uptimeHistory: synthesizeUptime30d(raw),
   }

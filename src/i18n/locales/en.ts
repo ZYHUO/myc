@@ -52,6 +52,7 @@ export default {
       healthy: 'Healthy',
       degraded: 'Degraded',
       down: 'Down',
+      unknown: 'Unknown',
       online: 'Online',
       offline: 'Offline',
     },

@@ -31,16 +31,18 @@ onUnmounted(() => {
   if (refreshInterval.value) clearInterval(refreshInterval.value)
 })
 
-function statusBadgeVariant(s: ChannelMonitor['status']): 'green' | 'amber' | 'red' {
+function statusBadgeVariant(s: ChannelMonitor['status']): 'green' | 'amber' | 'red' | 'gray' {
   if (s === 'healthy') return 'green'
   if (s === 'degraded') return 'amber'
-  return 'red'
+  if (s === 'down') return 'red'
+  return 'gray' // unknown → neutral, never red
 }
 
 function statusLabel(s: ChannelMonitor['status']): string {
   if (s === 'healthy') return t('common.status.healthy')
   if (s === 'degraded') return t('common.status.degraded')
-  return t('common.status.down')
+  if (s === 'down') return t('common.status.down')
+  return t('common.status.unknown')
 }
 
 function uptimeSegmentColor(s: 'up' | 'down' | 'degraded'): string {
