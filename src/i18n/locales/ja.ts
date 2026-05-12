@@ -325,9 +325,26 @@ export default {
     historyEmpty: '過去の引換はありません。',
     cols: {
       code: 'コード',
-      amount: '金額',
+      type: '種別',
+      amount: '金額 / 数量',
       date: '日時',
     },
+    types: {
+      balance: '残高チャージ',
+      admin_balance: '管理者調整',
+      affiliate_balance: 'アフィリエイト',
+      concurrency: '同時実行数',
+      subscription: 'サブスク',
+      invitation: '招待',
+    },
+    status: {
+      unused: '未使用',
+      used: '使用済み',
+      expired: '期限切れ',
+      revoked: '無効化',
+    },
+    unitConcurrency: '+{n} 同時',
+    unitMonths: '{n} ヶ月',
     toast: {
       success: 'コードを引き換えました。残高を更新しました。',
       empty: 'コードを入力してください',
@@ -661,5 +678,11 @@ export default {
     failed: 'キャプチャ認証に失敗しました。再度お試しください。',
     expired: 'キャプチャの有効期限が切れました。もう一度実行してください。',
     pleaseComplete: '先にキャプチャを完了してください。',
+  },
+
+  agreement: {
+    modalTitle: '同意事項',
+    empty: '管理者はこのドキュメントの内容をまだ公開していません。',
+    open: '読む',
   },
 }

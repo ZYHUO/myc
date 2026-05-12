@@ -52,10 +52,22 @@ export interface PublicSettings {
   home_content: string
   version: string
 
-  // Terms of service
+  // Terms of service. The upstream payload uses `{id, title, content_md}`
+  // (markdown text, NOT a URL). Older / forked deployments may return
+  // `{name, url}` instead — typed as optional to tolerate either.
   login_agreement_enabled: boolean
   login_agreement_mode: string
-  login_agreement_documents: Array<{ name?: string; url?: string; required?: boolean }>
+  login_agreement_documents: LoginAgreementDocument[]
+}
+
+export interface LoginAgreementDocument {
+  id?: string
+  title?: string
+  content_md?: string
+  // Legacy / fork compatibility — not present on a stock sub2api.
+  name?: string
+  url?: string
+  required?: boolean
 }
 
 const DEFAULT_SETTINGS: PublicSettings = {

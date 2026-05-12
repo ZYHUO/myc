@@ -9,6 +9,7 @@ import { UiInput, UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
 import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
 import UiTurnstile from '@/components/ui/UiTurnstile.vue'
+import UiAgreementModal from '@/components/ui/UiAgreementModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -55,42 +56,22 @@ const redirectTarget = computed(() => {
   return typeof q === 'string' && q.startsWith('/') ? q : '/dashboard'
 })
 
-// Escape any string that originates outside our own bundle before splicing it
-// into HTML. Admin-controlled values like `doc.name` and `doc.url` are not
-// inherently trusted, even though they come from an authenticated settings
-// endpoint — defence in depth.
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+// Login-agreement docs come from sub2api's /settings/public — the upstream
+// shape is `{ id, title, content_md }`. We surface each as a clickable
+// inline button that opens UiAgreementModal so users can read the terms
+// without leaving the registration flow.
+const agreementDocs = computed(() => settings.value.login_agreement_documents ?? [])
+const agreementModalOpen = ref(false)
+const agreementInitialId = ref<string>('')
+
+function openAgreement(id?: string) {
+  if (id) agreementInitialId.value = id
+  agreementModalOpen.value = true
 }
 
-const agreementHtml = computed(() => {
-  const docs = settings.value.login_agreement_documents
-  const fallback = escapeHtml(t('auth.register.defaultTermsLabel'))
-  const termsHtml = docs.length === 0
-    ? `<span>${fallback}</span>`
-    : docs
-        .map((d) => {
-          const label = escapeHtml(d?.name || t('auth.register.defaultTermsLabel'))
-          // Reject URLs whose scheme isn't http(s) so we can't render
-          // `javascript:` or `data:` payloads from a compromised admin setting.
-          const url = d?.url || ''
-          const safeUrl = /^https?:\/\//i.test(url) ? escapeHtml(url) : ''
-          if (safeUrl) {
-            return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="text-fg underline">${label}</a>`
-          }
-          return `<span>${label}</span>`
-        })
-        .join(', ')
-  // `t()` itself returns plain text with our `{terms}` placeholder replaced
-  // verbatim — vue-i18n doesn't HTML-escape, so this template must not
-  // contain any user-controlled values (it doesn't; it's a static string).
-  return t('auth.register.agreement', { terms: termsHtml })
-})
+function docLabel(doc: { title?: string; name?: string }) {
+  return doc.title || doc.name || t('auth.register.defaultTermsLabel')
+}
 
 // {signIn} placeholder in the disabled-banner body, replaced at render-time
 // with a real RouterLink (built via JSX-style render fn).
@@ -322,7 +303,27 @@ async function handleSubmit() {
 
           <label v-if="needsAgreement" class="flex items-start gap-2 text-sm">
             <input v-model="agreed" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-input accent-primary" />
-            <span class="text-muted-fg leading-relaxed" v-html="agreementHtml"></span>
+            <!-- The agreement template has a single `{terms}` placeholder.
+                 We render the list of clickable doc names into it via the
+                 i18n-t named-slot pattern — no v-html, no escaping headaches,
+                 and each click opens the agreement modal inline. -->
+            <i18n-t keypath="auth.register.agreement" tag="span" scope="global" class="text-muted-fg leading-relaxed">
+              <template #terms>
+                <template v-if="agreementDocs.length === 0">
+                  <span>{{ t('auth.register.defaultTermsLabel') }}</span>
+                </template>
+                <template v-else>
+                  <template v-for="(doc, i) in agreementDocs" :key="doc.id ?? i">
+                    <button
+                      type="button"
+                      class="text-fg underline hover:no-underline"
+                      @click.prevent="openAgreement(doc.id)"
+                    >{{ docLabel(doc) }}</button>
+                    <template v-if="i < agreementDocs.length - 1">, </template>
+                  </template>
+                </template>
+              </template>
+            </i18n-t>
           </label>
 
           <div v-if="turnstileEnabled" class="pt-1">
@@ -349,5 +350,14 @@ async function handleSubmit() {
     </main>
 
     <footer class="px-6 sm:px-8 py-6 text-xs text-muted-fg">© Amodel</footer>
+
+    <!-- Agreement modal renders only when needsAgreement, so we don't ship
+         the markdown subsystem to deployments that don't use it. -->
+    <UiAgreementModal
+      v-if="needsAgreement"
+      v-model="agreementModalOpen"
+      :documents="agreementDocs"
+      :initial-id="agreementInitialId"
+    />
   </div>
 </template>

@@ -325,9 +325,26 @@ export default {
     historyEmpty: '暂无兑换记录。',
     cols: {
       code: '兑换码',
-      amount: '金额',
-      date: '日期',
+      type: '类型',
+      amount: '金额 / 数量',
+      date: '时间',
     },
+    types: {
+      balance: '余额充值',
+      admin_balance: '管理员调账',
+      affiliate_balance: '推广返利',
+      concurrency: '并发数',
+      subscription: '订阅',
+      invitation: '邀请码',
+    },
+    status: {
+      unused: '未使用',
+      used: '已使用',
+      expired: '已过期',
+      revoked: '已作废',
+    },
+    unitConcurrency: '+{n} 并发',
+    unitMonths: '{n} 月',
     toast: {
       success: '兑换成功，余额已更新。',
       empty: '请输入兑换码',
@@ -661,5 +678,11 @@ export default {
     failed: '人机验证失败，请重试。',
     expired: '人机验证已过期，请重试。',
     pleaseComplete: '请先完成人机验证。',
+  },
+
+  agreement: {
+    modalTitle: '协议条款',
+    empty: '管理员尚未发布该文档内容。',
+    open: '阅读',
   },
 }

@@ -331,9 +331,26 @@ export default {
     historyEmpty: 'No previous redemptions.',
     cols: {
       code: 'Code',
+      type: 'Type',
       amount: 'Amount',
       date: 'Date',
     },
+    types: {
+      balance: 'Balance top-up',
+      admin_balance: 'Admin adjustment',
+      affiliate_balance: 'Affiliate rebate',
+      concurrency: 'Concurrency',
+      subscription: 'Subscription',
+      invitation: 'Invitation',
+    },
+    status: {
+      unused: 'Unused',
+      used: 'Used',
+      expired: 'Expired',
+      revoked: 'Revoked',
+    },
+    unitConcurrency: '+{n} concurrency',
+    unitMonths: '{n} month',
     toast: {
       success: 'Code redeemed. Balance updated.',
       empty: 'Please enter a code',
@@ -681,5 +698,11 @@ export default {
     failed: 'Captcha verification failed. Please try again.',
     expired: 'Captcha expired. Please retry.',
     pleaseComplete: 'Please complete the captcha first.',
+  },
+
+  agreement: {
+    modalTitle: 'Agreement',
+    empty: 'The administrator has not published the content for this document yet.',
+    open: 'Read',
   },
 }
