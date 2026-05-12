@@ -524,7 +524,7 @@ export default {
       items: [
         {
           q: '需要装单独的 SDK 吗？',
-          a: '不需要。Amodel 兼容 OpenAI 和 Anthropic 的协议，所以任何现成客户端（openai-python、@anthropic-ai/sdk、LangChain 等）都能对接。只要换 base URL 和模型名就行。',
+          a: "不需要。Amodel 兼容 OpenAI 和 Anthropic 的协议，所以任何现成客户端（openai-python、{'@'}anthropic-ai/sdk、LangChain 等）都能对接。只要换 base URL 和模型名就行。",
         },
         {
           q: '支持哪些模型？',
@@ -594,7 +594,7 @@ export default {
       disabledTitle: '注册功能已关闭',
       disabledBody: '本服务暂时不开放注册。请联系管理员开通账号，或使用已有账号 {signIn}。',
       emailLabel: '邮箱',
-      emailPlaceholder: 'you@example.com',
+      emailPlaceholder: "you{'@'}example.com",
       verifyCodeLabel: '验证码',
       verifyCodePlaceholder: '6 位数字',
       sendCode: '发送验证码',
@@ -632,6 +632,12 @@ export default {
 
   language: {
     label: '语言',
+    modes: {
+      auto: '跟随浏览器',
+      en: 'English',
+      'zh-CN': '简体中文',
+      ja: '日本語',
+    },
     names: {
       en: 'English',
       'zh-CN': '简体中文',

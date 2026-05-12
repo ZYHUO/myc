@@ -533,7 +533,7 @@ export default {
       items: [
         {
           q: 'Do I need a separate SDK?',
-          a: 'No. Amodel speaks the OpenAI and Anthropic protocols, so any existing client (openai-python, @anthropic-ai/sdk, LangChain, …) works against our endpoint. Just swap the base URL and the model name.',
+          a: "No. Amodel speaks the OpenAI and Anthropic protocols, so any existing client (openai-python, {'@'}anthropic-ai/sdk, LangChain, …) works against our endpoint. Just swap the base URL and the model name.",
         },
         {
           q: 'Which models are supported?',
@@ -606,7 +606,10 @@ export default {
       disabledTitle: 'Registration is currently closed',
       disabledBody: 'New sign-ups are disabled on this server. Please reach out to your administrator for an account, or {signIn} with an existing one.',
       emailLabel: 'Email',
-      emailPlaceholder: 'you@example.com',
+      // `@` is a reserved character in vue-i18n's linked-message syntax; we
+       // escape it with `{'@'}` so the parser doesn't treat the rest of the
+       // string as a key path.
+       emailPlaceholder: "you{'@'}example.com",
       verifyCodeLabel: 'Verification code',
       verifyCodePlaceholder: '6-digit code',
       sendCode: 'Send code',
@@ -648,6 +651,13 @@ export default {
   // ────────────────────────────────────────────────────────────
   language: {
     label: 'Language',
+    modes: {
+      auto: 'Auto',
+      en: 'English',
+      'zh-CN': '简体中文',
+      ja: '日本語',
+    },
+    // Legacy alias kept for any callers still hitting `language.names.*`.
     names: {
       en: 'English',
       'zh-CN': '简体中文',

@@ -65,14 +65,34 @@ function setupReveals() {
   if (statsRef.value) observer.observe(statsRef.value)
 }
 
+// ─── Pause hero animations when scrolled past ──────────────────────────────
+// The marquee + floating blurs are decorative. As soon as the hero is fully
+// off-screen we toggle `.is-offscreen` (style.css pauses animations on it),
+// reclaiming significant GPU/CPU on long sessions.
+const heroSection = ref<HTMLElement | null>(null)
+const heroOffscreen = ref(false)
+let heroObserver: IntersectionObserver | null = null
+function setupHeroPause() {
+  if (typeof IntersectionObserver === 'undefined' || !heroSection.value) return
+  heroObserver = new IntersectionObserver(
+    ([entry]) => { heroOffscreen.value = !entry.isIntersecting },
+    { threshold: 0 },
+  )
+  heroObserver.observe(heroSection.value)
+}
+
 onMounted(() => {
   settingsStore.load().catch(() => {})
   // Run after the DOM has settled.
-  requestAnimationFrame(setupReveals)
+  requestAnimationFrame(() => {
+    setupReveals()
+    setupHeroPause()
+  })
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
+  heroObserver?.disconnect()
   if (typeof document !== 'undefined') document.documentElement.style.overflow = ''
 })
 
@@ -184,7 +204,7 @@ function go(path: string) {
     </header>
 
     <!-- ─── Hero ───────────────────────────────────────────────────────── -->
-    <section class="relative overflow-hidden">
+    <section ref="heroSection" class="relative overflow-hidden" :class="{ 'is-offscreen': heroOffscreen }">
       <!-- Decorative blurs / orbs -->
       <div class="pointer-events-none absolute -top-32 -right-24 h-[480px] w-[480px] rounded-full bg-primary/10 blur-3xl animate-float-slow" aria-hidden="true"></div>
       <div class="pointer-events-none absolute top-40 -left-24 h-[400px] w-[400px] rounded-full bg-accent/70 blur-3xl animate-float-slow" style="animation-delay: 2s" aria-hidden="true"></div>
@@ -219,11 +239,11 @@ function go(path: string) {
               <span class="h-2.5 w-2.5 rounded-full bg-muted-fg/30"></span>
               <span class="ml-3 font-mono text-[11px] text-muted-fg">curl</span>
             </div>
-            <pre class="overflow-x-auto px-4 sm:px-5 py-4 font-mono text-[12px] sm:text-[13px] leading-relaxed text-fg"><code><span class="text-muted-fg">$</span> curl <span class="text-primary">https://amodel.example.com/v1/messages</span> \
-    -H <span class="text-primary">"Authorization: Bearer $AMODEL_KEY"</span> \
-    -d '{ <span class="text-primary">"model"</span>: <span class="text-primary">"claude-sonnet-4"</span>,
-          <span class="text-primary">"messages"</span>: [{ <span class="text-primary">"role"</span>: <span class="text-primary">"user"</span>,
-                          <span class="text-primary">"content"</span>: <span class="text-primary">"hi"</span> }] }'<span class="animate-blink text-primary">▍</span></code></pre>
+            <pre class="overflow-x-auto px-4 sm:px-5 py-4 font-mono text-[12px] sm:text-[13px] leading-relaxed text-fg"><code><span class="text-muted-fg">$</span> curl <span class="code-accent">https://amodel.example.com/v1/messages</span> \
+    -H <span class="code-accent">"Authorization: Bearer $AMODEL_KEY"</span> \
+    -d '{ <span class="code-accent">"model"</span>: <span class="code-accent">"claude-sonnet-4"</span>,
+          <span class="code-accent">"messages"</span>: [{ <span class="code-accent">"role"</span>: <span class="code-accent">"user"</span>,
+                          <span class="code-accent">"content"</span>: <span class="code-accent">"hi"</span> }] }'<span class="animate-blink text-primary">▍</span></code></pre>
           </div>
           <p class="mt-3 text-xs sm:text-sm text-muted-fg">{{ t('landing.hero.codeCaption') }}</p>
         </div>
@@ -271,7 +291,7 @@ function go(path: string) {
     </section>
 
     <!-- ─── Features ───────────────────────────────────────────────────── -->
-    <section id="features" class="border-t border-border bg-card/40">
+    <section id="features" class="border-t border-border bg-card/40 cv-auto">
       <div class="mx-auto max-w-[1200px] px-4 sm:px-6 py-20 sm:py-28">
         <div class="reveal">
           <p class="text-[11px] uppercase tracking-[0.22em] text-muted-fg font-medium">{{ t('landing.features.eyebrow') }}</p>
@@ -298,7 +318,7 @@ function go(path: string) {
     </section>
 
     <!-- ─── How it works ────────────────────────────────────────────────── -->
-    <section class="border-t border-border">
+    <section class="border-t border-border cv-auto">
       <div class="mx-auto max-w-[1200px] px-4 sm:px-6 py-20 sm:py-28">
         <div class="reveal">
           <p class="text-[11px] uppercase tracking-[0.22em] text-muted-fg font-medium">{{ t('landing.howItWorks.eyebrow') }}</p>
@@ -317,7 +337,7 @@ function go(path: string) {
     </section>
 
     <!-- ─── Pricing ────────────────────────────────────────────────────── -->
-    <section id="pricing" class="border-t border-border bg-card/40">
+    <section id="pricing" class="border-t border-border bg-card/40 cv-auto">
       <div class="mx-auto max-w-[1200px] px-4 sm:px-6 py-20 sm:py-28">
         <div class="reveal max-w-2xl">
           <p class="text-[11px] uppercase tracking-[0.22em] text-muted-fg font-medium">{{ t('landing.pricing.eyebrow') }}</p>
@@ -375,7 +395,7 @@ function go(path: string) {
     </section>
 
     <!-- ─── FAQ ────────────────────────────────────────────────────────── -->
-    <section id="faq" class="border-t border-border">
+    <section id="faq" class="border-t border-border cv-auto">
       <div class="mx-auto max-w-[840px] px-4 sm:px-6 py-20 sm:py-28">
         <div class="reveal">
           <p class="text-[11px] uppercase tracking-[0.22em] text-muted-fg font-medium">{{ t('landing.faq.eyebrow') }}</p>

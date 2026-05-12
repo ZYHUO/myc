@@ -19,13 +19,24 @@ client.interceptors.request.use((config) => {
 
 client.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
-      if (router.currentRoute.value.name !== 'login') {
+      localStorage.removeItem('refresh_token')
+      // Lazy-load the auth store to avoid a circular import — stores/auth.ts
+      // imports THIS file, so a static import would deadlock during boot.
+      try {
+        const { useAuthStore } = await import('@/stores/auth')
+        useAuthStore().user = null
+      } catch {
+        // Pinia not initialised yet (very early boot); localStorage clearing
+        // is sufficient — the store will read no token on next fetchUser().
+      }
+      const current = router.currentRoute.value
+      if (current.name !== 'login' && current.meta.public !== true) {
         router.push({
           name: 'login',
-          query: { redirect: router.currentRoute.value.fullPath },
+          query: { redirect: current.fullPath },
         })
       }
     }

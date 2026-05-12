@@ -1,32 +1,43 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SUPPORTED_LOCALES, setLocale, type SupportedLocale } from '@/i18n'
+import {
+  LOCALE_OPTIONS,
+  getLocalePreference,
+  resolvePreference,
+  setLocalePreference,
+  type LocalePreference,
+} from '@/i18n'
 
 const { locale, t } = useI18n()
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
+const pref = ref<LocalePreference>(getLocalePreference())
 
-const current = computed<SupportedLocale>(() => locale.value as SupportedLocale)
+// Compact label on the trigger: shows the EFFECTIVE locale (not the
+// preference) so the user sees what they're currently reading.
 const shortLabel = computed(() => {
-  // Compact button text — language family code is friendlier than a flag.
-  if (current.value === 'zh-CN') return '中'
-  if (current.value === 'ja') return '日'
+  if (locale.value === 'zh-CN') return '中'
+  if (locale.value === 'ja') return '日'
   return 'EN'
 })
 
-async function pick(loc: SupportedLocale) {
+async function pick(p: LocalePreference) {
   open.value = false
-  // Awaited so the optional dynamic import resolves before we hand control back.
-  // Errors are non-fatal — vue-i18n keeps the previous locale if the import fails.
-  try { await setLocale(loc) } catch { /* network blip; stay put */ }
+  pref.value = p
+  // Errors are non-fatal — vue-i18n keeps the previous locale if the
+  // dynamic import fails (network blip).
+  try {
+    await setLocalePreference(p)
+  } catch {
+    /* stay on previous locale */
+  }
 }
 
 function onDocClick(e: MouseEvent) {
   if (!rootRef.value) return
   if (!rootRef.value.contains(e.target as Node)) open.value = false
 }
-
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') open.value = false
 }
@@ -62,20 +73,25 @@ onBeforeUnmount(() => {
     <Transition name="popover">
       <ul
         v-if="open"
-        class="absolute right-0 z-30 mt-2 min-w-[160px] overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg"
+        class="absolute right-0 z-30 mt-2 min-w-[200px] overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg"
         role="listbox"
       >
-        <li v-for="loc in SUPPORTED_LOCALES" :key="loc">
+        <li v-for="opt in LOCALE_OPTIONS" :key="opt">
           <button
             type="button"
-            class="flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-muted"
-            :class="loc === current ? 'text-fg font-medium' : 'text-muted-fg'"
+            class="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-muted"
+            :class="opt === pref ? 'text-fg font-medium' : 'text-muted-fg'"
             role="option"
-            :aria-selected="loc === current"
-            @click="pick(loc)"
+            :aria-selected="opt === pref"
+            @click="pick(opt)"
           >
-            <span>{{ t(`language.names.${loc}`) }}</span>
-            <svg v-if="loc === current" class="h-4 w-4 text-primary" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <span>
+              {{ t(`language.modes.${opt}`) }}
+              <span v-if="opt === 'auto'" class="ml-1 text-xs text-muted-fg/80 normal-case font-normal">
+                · {{ resolvePreference('auto') }}
+              </span>
+            </span>
+            <svg v-if="opt === pref" class="h-4 w-4 text-primary shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5 5 9-12" />
             </svg>
           </button>

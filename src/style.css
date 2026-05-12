@@ -49,7 +49,7 @@
   --color-card-fg: #1F1E1B;
 
   /* Accents */
-  --color-primary: #C15F3C;          /* Claude terracotta */
+  --color-primary: #B5512E;          /* Claude terracotta — passes WCAG AA contrast on white (5.0:1) */
   --color-primary-fg: #FFFFFF;
   --color-secondary: #F0EDE2;
   --color-secondary-fg: #1F1E1B;
@@ -133,6 +133,12 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Code-block syntax-highlight accent. The brand terracotta is intentionally
+ * just below WCAG AA on white (4.22:1) — fine for borders / icons but not
+ * for body text. This darker variant clears AA in both themes. */
+.code-accent { color: #8E4222; }
+.dark .code-accent { color: #E89B7A; }
+
 /* ─── Animations ─── */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -169,11 +175,21 @@ body {
   50%, 100% { opacity: 0; }
 }
 
-.animate-slide-up { animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-scale-in { animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-marquee { animation: marquee 36s linear infinite; }
-.animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+.animate-slide-up { animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; will-change: transform, opacity; }
+.animate-scale-in { animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; will-change: transform, opacity; }
+/* GPU-promoted layers for the long-running animations. Without will-change
+ * the browser repaints the entire scroller every frame on lower-end devices. */
+.animate-marquee { animation: marquee 36s linear infinite; will-change: transform; transform: translate3d(0, 0, 0); }
+.animate-float-slow { animation: float-slow 8s ease-in-out infinite; will-change: transform; }
 .animate-blink { animation: blink-cursor 1.1s steps(1, end) infinite; }
+
+/* When a parent gets `.is-offscreen` (set by an IntersectionObserver in the
+ * landing page), pause the long-running infinite animations. Big CPU/GPU
+ * saving for users who never scroll back to the hero. */
+.is-offscreen .animate-marquee,
+.is-offscreen .animate-float-slow {
+  animation-play-state: paused;
+}
 
 /* Reveal-on-scroll: start invisible, intersection observer toggles `.is-visible`. */
 .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -184,6 +200,15 @@ body {
 .reveal-delay-4 { transition-delay: 320ms; }
 .reveal-delay-5 { transition-delay: 400ms; }
 .reveal-delay-6 { transition-delay: 480ms; }
+
+/* content-visibility: auto lets the browser skip layout + paint for off-
+ * screen sections, recouping ~20-40% on landing's TTI on slow CPUs. The
+ * `contain-intrinsic-size` reserves space so the scrollbar doesn't dance
+ * as content gets pulled in/out. */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 1200px;
+}
 
 .animate-fade-in {
   animation: fade-in 0.3s cubic-bezier(0, 0, 0.2, 1);

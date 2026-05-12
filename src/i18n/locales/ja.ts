@@ -524,7 +524,7 @@ export default {
       items: [
         {
           q: '専用 SDK は必要ですか？',
-          a: 'いいえ。Amodel は OpenAI / Anthropic プロトコル準拠なので、既存クライアント（openai-python、@anthropic-ai/sdk、LangChain など）がそのまま使えます。base URL とモデル名を差し替えるだけです。',
+          a: "いいえ。Amodel は OpenAI / Anthropic プロトコル準拠なので、既存クライアント（openai-python、{'@'}anthropic-ai/sdk、LangChain など）がそのまま使えます。base URL とモデル名を差し替えるだけです。",
         },
         {
           q: '対応モデルは？',
@@ -594,7 +594,7 @@ export default {
       disabledTitle: '現在、新規登録は受付停止中です',
       disabledBody: '本サーバーでは新規登録が無効化されています。管理者にお問い合わせいただくか、既存アカウントで {signIn} してください。',
       emailLabel: 'メールアドレス',
-      emailPlaceholder: 'you@example.com',
+      emailPlaceholder: "you{'@'}example.com",
       verifyCodeLabel: '認証コード',
       verifyCodePlaceholder: '6 桁の数字',
       sendCode: 'コードを送信',
@@ -632,6 +632,12 @@ export default {
 
   language: {
     label: '言語',
+    modes: {
+      auto: 'ブラウザに従う',
+      en: 'English',
+      'zh-CN': '简体中文',
+      ja: '日本語',
+    },
     names: {
       en: 'English',
       'zh-CN': '简体中文',

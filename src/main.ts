@@ -23,4 +23,11 @@ app.use(i18n)
 //      import that chunk before first paint to avoid flashing English text.
 Promise.all([router.isReady(), bootstrapLocale()]).then(() => {
   app.mount("#app")
+  // Fade out and remove the boot splash that index.html paints before this
+  // module parses. The fade-out duration matches the CSS transition.
+  const splash = document.getElementById("app-boot")
+  if (splash) {
+    splash.classList.add("is-hidden")
+    setTimeout(() => splash.remove(), 280)
+  }
 })
