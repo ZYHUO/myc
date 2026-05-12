@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables'
 import { UiInput, UiButton } from '@/components/ui'
+import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
 import { isMockMode } from '@/api/_util'
 
 const router = useRouter()
@@ -12,6 +14,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const email = ref('')
 const password = ref('')
@@ -22,7 +25,7 @@ const showPasswordReset = computed(() => settingsStore.settings.password_reset_e
 
 onMounted(() => {
   settingsStore.load().catch(() => {
-    // optional; we still render with the default flag values
+    // Optional; we still render with default flag values
   })
 })
 
@@ -34,16 +37,16 @@ const redirectTarget = computed(() => {
 async function handleSubmit() {
   if (submitting.value) return
   if (!email.value.trim() || !password.value) {
-    toast.error('Please enter both email and password')
+    toast.error(t('auth.login.emailRequired'))
     return
   }
   submitting.value = true
   try {
     await auth.login(email.value.trim(), password.value)
-    toast.success('Welcome back')
+    toast.success(t('auth.login.success'))
     await router.replace(redirectTarget.value)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Login failed'
+    const message = err instanceof Error ? err.message : t('auth.login.failed')
     toast.error(message)
   } finally {
     submitting.value = false
@@ -54,42 +57,42 @@ async function handleSubmit() {
 <template>
   <div class="min-h-screen flex flex-col bg-bg">
     <!-- Brand strip -->
-    <header class="px-8 py-6">
+    <header class="px-6 sm:px-8 py-5 flex items-center justify-between">
       <RouterLink to="/" class="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
         <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
           A
         </div>
         <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
       </RouterLink>
+      <UiLanguageSwitcher />
     </header>
 
     <!-- Card -->
-    <main class="flex flex-1 items-center justify-center px-6">
-      <div class="w-full max-w-[420px]">
+    <main class="flex flex-1 items-center justify-center px-6 py-8">
+      <div class="w-full max-w-[420px] animate-fade-in">
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">SIGN IN</p>
-          <h1 class="mt-3 text-4xl font-display font-normal tracking-tight">Welcome back</h1>
-          <p class="mt-3 text-sm text-muted-fg leading-relaxed">
-            Sign in to manage your API keys, usage, and billing.
-          </p>
+          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('auth.login.eyebrow') }}</p>
+          <h1 class="mt-3 text-4xl font-display font-normal tracking-tight">{{ t('auth.login.title') }}</h1>
+          <p class="mt-3 text-sm text-muted-fg leading-relaxed">{{ t('auth.login.subtitle') }}</p>
         </div>
 
         <form class="mt-8 space-y-5" @submit.prevent="handleSubmit">
           <div>
             <label for="login-email" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Email
+              {{ t('common.email') }}
             </label>
             <UiInput
               id="login-email"
               v-model="email"
               placeholder="your@email.com"
               autocomplete="email"
+              inputmode="email"
             />
           </div>
 
           <div>
             <label for="login-password" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Password
+              {{ t('common.password') }}
             </label>
             <UiInput
               id="login-password"
@@ -107,28 +110,25 @@ async function handleSubmit() {
             class="w-full"
             :disabled="submitting"
           >
-            {{ submitting ? 'Signing in…' : 'Sign in' }}
+            {{ submitting ? t('auth.login.submitting') : t('auth.login.submit') }}
           </UiButton>
         </form>
 
         <p v-if="showRegister" class="mt-6 text-sm text-muted-fg">
-          New to Amodel?
-          <RouterLink to="/register" class="text-fg font-medium underline ml-1">Create an account</RouterLink>
+          {{ t('auth.login.noAccount') }}
+          <RouterLink to="/register" class="text-fg font-medium underline ml-1">{{ t('auth.login.register') }}</RouterLink>
         </p>
         <p v-if="showPasswordReset" class="mt-2 text-xs text-muted-fg">
-          <RouterLink to="/forgot-password" class="underline">Forgot password?</RouterLink>
+          <RouterLink to="/forgot-password" class="underline">{{ t('auth.login.forgotPassword') }}</RouterLink>
         </p>
 
         <p v-if="isMockMode()" class="mt-6 text-xs text-muted-fg leading-relaxed">
           <span class="inline-block rounded-sm bg-accent px-1.5 py-0.5 font-mono text-[10px] text-accent-fg mr-1">MOCK</span>
-          Any non-empty email and password are accepted. Set
-          <code class="font-mono text-[11px]">VITE_USE_MOCK=false</code> to use the real backend.
+          {{ t('auth.login.mockHint') }}
         </p>
       </div>
     </main>
 
-    <footer class="px-8 py-6 text-xs text-muted-fg">
-      © Amodel
-    </footer>
+    <footer class="px-6 sm:px-8 py-6 text-xs text-muted-fg">© Amodel</footer>
   </div>
 </template>

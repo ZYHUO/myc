@@ -6,7 +6,11 @@ import UiToast from "@/components/ui/UiToast.vue"
 import UiConfirm from "@/components/ui/UiConfirm.vue"
 
 const route = useRoute()
-const useChrome = computed(() => route.meta.layout !== "none")
+
+// The router is awaited in main.ts before mounting, so by the time this
+// renders the route is already resolved — `route.name` is always populated.
+// Public routes opt out of the app chrome via `meta.layout: 'none'`.
+const useChrome = computed(() => Boolean(route.name) && route.meta.layout !== "none")
 </script>
 
 <template>

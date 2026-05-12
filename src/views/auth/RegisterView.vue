@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables'
 import { UiInput, UiButton } from '@/components/ui'
+import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const email = ref('')
 const password = ref('')
@@ -25,8 +28,6 @@ const sendingCode = ref(false)
 const codeCountdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
-// Affiliate attribution from ?aff=… on the URL is captured at mount and
-// preserved across re-renders.
 const affCode = ref('')
 
 const settings = computed(() => settingsStore.settings)
@@ -41,13 +42,70 @@ const emailSuffixes = computed(() => settings.value.registration_email_suffix_wh
 const suffixHint = computed(() =>
   emailSuffixes.value.length === 0
     ? ''
-    : `Only the following email domains are allowed: ${emailSuffixes.value.join(', ')}`,
+    : t('auth.register.suffixHint', { list: emailSuffixes.value.join(', ') }),
 )
 
 const redirectTarget = computed(() => {
   const q = route.query.redirect
   return typeof q === 'string' && q.startsWith('/') ? q : '/dashboard'
 })
+
+// Escape any string that originates outside our own bundle before splicing it
+// into HTML. Admin-controlled values like `doc.name` and `doc.url` are not
+// inherently trusted, even though they come from an authenticated settings
+// endpoint — defence in depth.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+const agreementHtml = computed(() => {
+  const docs = settings.value.login_agreement_documents
+  const fallback = escapeHtml(t('auth.register.defaultTermsLabel'))
+  const termsHtml = docs.length === 0
+    ? `<span>${fallback}</span>`
+    : docs
+        .map((d) => {
+          const label = escapeHtml(d?.name || t('auth.register.defaultTermsLabel'))
+          // Reject URLs whose scheme isn't http(s) so we can't render
+          // `javascript:` or `data:` payloads from a compromised admin setting.
+          const url = d?.url || ''
+          const safeUrl = /^https?:\/\//i.test(url) ? escapeHtml(url) : ''
+          if (safeUrl) {
+            return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="text-fg underline">${label}</a>`
+          }
+          return `<span>${label}</span>`
+        })
+        .join(', ')
+  // `t()` itself returns plain text with our `{terms}` placeholder replaced
+  // verbatim — vue-i18n doesn't HTML-escape, so this template must not
+  // contain any user-controlled values (it doesn't; it's a static string).
+  return t('auth.register.agreement', { terms: termsHtml })
+})
+
+// {signIn} placeholder in the disabled-banner body, replaced at render-time
+// with a real RouterLink (built via JSX-style render fn).
+const DisabledBannerBody = {
+  setup() {
+    return () => {
+      const template = t('auth.register.disabledBody')
+      const parts = template.split('{signIn}')
+      const link = h('a', {
+        href: '/login',
+        class: 'text-fg underline',
+        onClick: (e: MouseEvent) => {
+          e.preventDefault()
+          router.push('/login')
+        },
+      }, t('auth.login.submit'))
+      return h('p', { class: 'mt-2 text-sm text-muted-fg' }, [parts[0] ?? '', link, parts[1] ?? ''])
+    }
+  },
+}
 
 onMounted(async () => {
   await settingsStore.load()
@@ -74,16 +132,16 @@ function startCountdown(seconds: number) {
 async function handleSendCode() {
   if (sendingCode.value || codeCountdown.value > 0) return
   if (!email.value.trim()) {
-    toast.error('Enter your email first')
+    toast.error(t('auth.register.emailFirst'))
     return
   }
   sendingCode.value = true
   try {
     const wait = await auth.sendVerifyCode(email.value.trim())
     startCountdown(wait || 60)
-    toast.success('Verification code sent. Check your inbox.')
+    toast.success(t('auth.register.sendSuccess'))
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to send code'
+    const msg = err instanceof Error ? err.message : t('auth.register.sendFailed')
     toast.error(msg)
   } finally {
     sendingCode.value = false
@@ -91,12 +149,12 @@ async function handleSendCode() {
 }
 
 function validate(): string | null {
-  if (!email.value.trim()) return 'Email is required'
-  if (!password.value) return 'Password is required'
-  if (password.value.length < 6) return 'Password must be at least 6 characters'
-  if (password.value !== passwordConfirm.value) return 'Passwords do not match'
-  if (needsVerifyCode.value && !verifyCode.value.trim()) return 'Enter the verification code from your email'
-  if (needsAgreement.value && !agreed.value) return 'You must accept the terms to continue'
+  if (!email.value.trim()) return t('auth.register.vEmailRequired')
+  if (!password.value) return t('auth.register.vPasswordRequired')
+  if (password.value.length < 6) return t('auth.register.vPasswordShort')
+  if (password.value !== passwordConfirm.value) return t('auth.register.vPasswordMismatch')
+  if (needsVerifyCode.value && !verifyCode.value.trim()) return t('auth.register.vCodeRequired')
+  if (needsAgreement.value && !agreed.value) return t('auth.register.vAgreementRequired')
   return null
 }
 
@@ -117,10 +175,10 @@ async function handleSubmit() {
       invitationCode: invitationCode.value.trim() || undefined,
       affCode: affCode.value || undefined,
     })
-    toast.success('Welcome to Amodel')
+    toast.success(t('auth.register.success'))
     await router.replace(redirectTarget.value)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Registration failed'
+    const msg = e instanceof Error ? e.message : t('auth.register.failed')
     toast.error(msg)
   } finally {
     submitting.value = false
@@ -131,24 +189,22 @@ async function handleSubmit() {
 <template>
   <div class="min-h-screen flex flex-col bg-bg">
     <!-- Brand strip -->
-    <header class="px-8 py-6">
+    <header class="px-6 sm:px-8 py-5 flex items-center justify-between">
       <RouterLink to="/" class="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
         <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
           A
         </div>
         <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
       </RouterLink>
+      <UiLanguageSwitcher />
     </header>
 
     <main class="flex flex-1 items-center justify-center px-6 py-8">
-      <div class="w-full max-w-[440px]">
+      <div class="w-full max-w-[440px] animate-fade-in">
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">CREATE ACCOUNT</p>
-          <h1 class="mt-3 text-4xl font-display font-normal tracking-tight">Get started</h1>
-          <p class="mt-3 text-sm text-muted-fg leading-relaxed">
-            One account, every model. Sign up to manage your API keys, monitor usage, and route
-            requests across providers.
-          </p>
+          <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('auth.register.eyebrow') }}</p>
+          <h1 class="mt-3 text-4xl font-display font-normal tracking-tight">{{ t('auth.register.title') }}</h1>
+          <p class="mt-3 text-sm text-muted-fg leading-relaxed">{{ t('auth.register.subtitle') }}</p>
         </div>
 
         <!-- Disabled banner -->
@@ -156,41 +212,38 @@ async function handleSubmit() {
           v-if="settingsStore.loaded && !registrationEnabled"
           class="mt-6 rounded-xl border border-dashed border-border bg-card p-5"
         >
-          <p class="text-sm font-medium text-fg">Registration is currently closed</p>
-          <p class="mt-2 text-sm text-muted-fg">
-            New sign-ups are disabled on this server. Please reach out to your administrator for
-            an account, or
-            <RouterLink to="/login" class="text-fg underline">sign in</RouterLink>
-            with an existing one.
-          </p>
+          <p class="text-sm font-medium text-fg">{{ t('auth.register.disabledTitle') }}</p>
+          <DisabledBannerBody />
         </div>
 
         <!-- Form -->
         <form v-else class="mt-8 space-y-5" @submit.prevent="handleSubmit">
           <div>
             <label for="reg-email" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Email
+              {{ t('auth.register.emailLabel') }}
             </label>
             <UiInput
               id="reg-email"
               v-model="email"
               type="email"
-              placeholder="you@example.com"
+              :placeholder="t('auth.register.emailPlaceholder')"
               autocomplete="email"
+              inputmode="email"
             />
             <p v-if="suffixHint" class="mt-1.5 text-xs text-muted-fg">{{ suffixHint }}</p>
           </div>
 
           <div v-if="needsVerifyCode">
             <label for="reg-code" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Verification code
+              {{ t('auth.register.verifyCodeLabel') }}
             </label>
             <div class="flex gap-2">
               <UiInput
                 id="reg-code"
                 v-model="verifyCode"
-                placeholder="6-digit code"
+                :placeholder="t('auth.register.verifyCodePlaceholder')"
                 autocomplete="one-time-code"
+                inputmode="numeric"
               />
               <UiButton
                 type="button"
@@ -199,86 +252,78 @@ async function handleSubmit() {
                 @click="handleSendCode"
               >
                 <template v-if="codeCountdown > 0">{{ codeCountdown }}s</template>
-                <template v-else-if="sendingCode">Sending…</template>
-                <template v-else>Send code</template>
+                <template v-else-if="sendingCode">{{ t('auth.register.sendingCode') }}</template>
+                <template v-else>{{ t('auth.register.sendCode') }}</template>
               </UiButton>
             </div>
           </div>
 
           <div>
             <label for="reg-password" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Password
+              {{ t('auth.register.passwordLabel') }}
             </label>
             <UiInput
               id="reg-password"
               v-model="password"
               type="password"
-              placeholder="At least 6 characters"
+              :placeholder="t('auth.register.passwordPlaceholder')"
               autocomplete="new-password"
             />
           </div>
 
           <div>
             <label for="reg-password2" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Confirm password
+              {{ t('auth.register.passwordConfirmLabel') }}
             </label>
             <UiInput
               id="reg-password2"
               v-model="passwordConfirm"
               type="password"
-              placeholder="Repeat password"
+              :placeholder="t('auth.register.passwordConfirmPlaceholder')"
               autocomplete="new-password"
             />
           </div>
 
           <div v-if="showInvitation">
             <label for="reg-invitation" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Invitation code
+              {{ t('auth.register.invitationLabel') }}
             </label>
-            <UiInput id="reg-invitation" v-model="invitationCode" placeholder="Required by this server" />
+            <UiInput id="reg-invitation" v-model="invitationCode" :placeholder="t('auth.register.invitationPlaceholder')" />
           </div>
 
           <div v-if="showPromo">
             <label for="reg-promo" class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">
-              Promo code <span class="text-muted-fg/70 normal-case tracking-normal">(optional)</span>
+              {{ t('auth.register.promoLabel') }}
+              <span class="text-muted-fg/70 normal-case tracking-normal">{{ t('auth.register.promoOptional') }}</span>
             </label>
-            <UiInput id="reg-promo" v-model="promoCode" placeholder="Apply a promo" />
+            <UiInput id="reg-promo" v-model="promoCode" :placeholder="t('auth.register.promoPlaceholder')" />
           </div>
 
           <div v-if="affCode" class="rounded-md bg-accent/50 px-3 py-2 text-xs text-accent-fg">
-            <span class="font-mono">Referred by {{ affCode }}</span>
+            <span class="font-mono">{{ t('auth.register.referredBy', { code: affCode }) }}</span>
           </div>
 
           <label v-if="needsAgreement" class="flex items-start gap-2 text-sm">
             <input v-model="agreed" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-input accent-primary" />
-            <span class="text-muted-fg leading-relaxed">
-              I have read and agree to the
-              <template v-for="(doc, i) in settings.login_agreement_documents" :key="i">
-                <a v-if="doc?.url" :href="doc.url" target="_blank" rel="noopener" class="text-fg underline">{{ doc.name || 'Terms' }}</a>
-                <template v-if="i < settings.login_agreement_documents.length - 1">, </template>
-              </template>
-              <template v-if="settings.login_agreement_documents.length === 0">terms of service</template>.
-            </span>
+            <span class="text-muted-fg leading-relaxed" v-html="agreementHtml"></span>
           </label>
 
           <p v-if="turnstileWarning" class="text-xs text-amber leading-relaxed">
-            ⚠ This server requires a Cloudflare Turnstile challenge that isn't wired in the SPA
-            yet. Registration may fail server-side; ask the administrator to disable Turnstile or
-            add the widget.
+            {{ t('auth.register.turnstileWarning') }}
           </p>
 
           <UiButton type="submit" variant="primary" size="lg" class="w-full" :disabled="submitting">
-            {{ submitting ? 'Creating account…' : 'Create account' }}
+            {{ submitting ? t('auth.register.submitting') : t('auth.register.submit') }}
           </UiButton>
         </form>
 
         <p class="mt-6 text-sm text-muted-fg">
-          Already have an account?
-          <RouterLink to="/login" class="text-fg font-medium underline ml-1">Sign in</RouterLink>
+          {{ t('auth.register.hasAccount') }}
+          <RouterLink to="/login" class="text-fg font-medium underline ml-1">{{ t('auth.login.submit') }}</RouterLink>
         </p>
       </div>
     </main>
 
-    <footer class="px-8 py-6 text-xs text-muted-fg">© Amodel</footer>
+    <footer class="px-6 sm:px-8 py-6 text-xs text-muted-fg">© Amodel</footer>
   </div>
 </template>
