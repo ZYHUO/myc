@@ -1,0 +1,33 @@
+# Cloudflare Pages / Netlify cache headers.
+#
+# The defaults of most static hosts cache every file aggressively, which is
+# usually what you want — EXCEPT for the three URLs below, where stale
+# responses make the entire auto-update mechanism fail.
+#
+# - /sw.js is what the browser polls to discover new Service Workers. If
+#   it's HTTP-cached for a day, the browser won't see a new build for a day.
+# - /version.json is what the runtime watchdog polls. Must be live.
+# - /recover.html is the standalone reset page. Always fresh.
+# - /index.html — the SPA shell. Letting it be aggressively cached at the
+#   edge means users see yesterday's UI even after the SW redeploys.
+#
+# Hashed assets (/assets/*.js, /assets/*.css, etc.) can keep their default
+# long cache because the filename changes on every build.
+
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/workbox-*.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/version.json
+  Cache-Control: no-store, no-cache, must-revalidate
+
+/recover.html
+  Cache-Control: no-store, no-cache, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate

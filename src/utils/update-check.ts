@@ -178,6 +178,7 @@ export function installUpdateWatchdog(): void {
 
   installChunkErrorHandler()
   installControllerChangeReload()
+  installServiceWorkerUpdatePoll()
 
   // First check shortly after boot, then on a steady cadence.
   setTimeout(() => { void checkForUpdate() }, 5_000)
@@ -187,5 +188,33 @@ export function installUpdateWatchdog(): void {
   // users leave Amodel parked in a background tab for hours.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void checkForUpdate()
+  })
+}
+
+/**
+ * Browsers check `/sw.js` for updates on navigation, but they respect HTTP
+ * caching headers — so a misconfigured CDN can pin a stale SW for hours.
+ * We periodically call `registration.update()`, which bypasses the SW's own
+ * cache and forces a fresh fetch of `/sw.js`. If a newer SW is on the
+ * server, it installs, skipWaitings, activates, and (thanks to
+ * clientsClaim) takes over the tab — at which point our `controllerchange`
+ * listener triggers the reload.
+ */
+function installServiceWorkerUpdatePoll(): void {
+  if (!('serviceWorker' in navigator)) return
+  const POKE_INTERVAL_MS = 5 * 60_000 // every 5 minutes
+
+  const poke = () => {
+    void navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.update())
+      .catch(() => { /* offline / transient */ })
+  }
+
+  // First poke after the tab settles, then on a steady cadence.
+  setTimeout(poke, 10_000)
+  setInterval(poke, POKE_INTERVAL_MS)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') poke()
   })
 }

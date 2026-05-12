@@ -58,14 +58,19 @@ const pwaPlugin: PluginOption | false = isStorybook
       // are picked up on the next reload.
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-        // Don't precache version.json — it must always come from the
-        // network so the runtime watchdog (src/utils/update-check.ts) can
-        // detect new builds.
-        globIgnores: ['**/version.json'],
+        // Don't precache version.json (always-network) or recover.html (the
+        // standalone reset page; we want every request for it to reach the
+        // server so a future update can replace it).
+        globIgnores: ['**/version.json', '**/recover.html'],
         navigateFallback: '/index.html',
-        // Don't intercept the API proxy — those calls need fresh data and the
-        // SW would otherwise return a stale (or wrong) response from cache.
-        navigateFallbackDenylist: [/^\/api\//, /^\/version\.json$/],
+        // Don't intercept these — the API needs fresh data, version.json
+        // powers the runtime watchdog, and recover.html must reach the
+        // server even when the SW is otherwise broken.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/version\.json$/,
+          /^\/recover\.html$/,
+        ],
         // CRITICAL for shipping fixes: without these, a new SW only activates
         // after EVERY tab closes — users can stare at a stale UI through
         // refreshes for days. With skipWaiting the new SW takes over on the
@@ -96,6 +101,13 @@ const pwaPlugin: PluginOption | false = isStorybook
             // Used by the runtime watchdog to detect a stale-bundle state
             // and force a clean reload.
             urlPattern: ({ url }) => url.pathname === '/version.json',
+            handler: 'NetworkOnly',
+          },
+          {
+            // recover.html is the standalone reset page. Never cache it —
+            // it must always reach the server so a user who's stuck can
+            // visit /recover.html and have it tear down whatever's broken.
+            urlPattern: ({ url }) => url.pathname === '/recover.html',
             handler: 'NetworkOnly',
           },
           {

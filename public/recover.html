@@ -1,0 +1,107 @@
+<!doctype html>
+<!--
+  Standalone recovery page. No SPA dependencies, no module imports — just
+  enough inline JS to unregister every Service Worker and clear caches.
+
+  Reach it at https://amodel.example.com/recover.html. This file is in
+  /public so the build emits it verbatim and the Workbox precache manifest
+  knows about it; the SW config exempts it from the SPA navigateFallback so
+  it isn't substituted with /index.html on its way through the SW.
+
+  Designed for "the user reports the app is broken and nothing works" cases.
+  After clearing, redirects to / with a cache-buster querystring.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Resetting Amodel…</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #FAF9F5; color: #1F1E1B; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #262624; color: #F1EDE2; }
+      }
+      .wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      .card { max-width: 360px; text-align: center; }
+      .chip {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 36px; height: 36px; border-radius: 6px;
+        background: #B5512E; color: #fff; font-family: ui-serif, Georgia, serif; font-size: 16px;
+        margin-bottom: 20px;
+      }
+      h1 { font-family: ui-serif, Georgia, serif; font-size: 24px; font-weight: 400; letter-spacing: -0.01em; margin: 0 0 12px; }
+      p { font-size: 14px; line-height: 1.55; color: #6B6760; margin: 0 0 24px; }
+      @media (prefers-color-scheme: dark) { p { color: #A8A296; } }
+      .spinner {
+        margin: 0 auto;
+        width: 22px; height: 22px;
+        border: 2px solid rgba(31,30,27,0.12);
+        border-top-color: #B5512E;
+        border-radius: 50%;
+        animation: spin 0.85s linear infinite;
+      }
+      @media (prefers-color-scheme: dark) {
+        .spinner { border-color: rgba(241,237,226,0.12); }
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .manual { margin-top: 32px; font-size: 12px; }
+      .manual a { color: #B5512E; }
+      @media (prefers-color-scheme: dark) { .manual a { color: #E89B7A; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="chip">A</div>
+        <h1>Resetting your Amodel</h1>
+        <p id="status">Clearing caches and reinstalling the latest version&hellip;</p>
+        <div class="spinner" id="sp"></div>
+        <div class="manual">
+          Stuck?
+          <a id="manual" href="/?force-refresh=1">Try this link</a>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var status = document.getElementById('status')
+        var sp = document.getElementById('sp')
+
+        function done(msg) {
+          if (status) status.textContent = msg
+          if (sp) sp.style.display = 'none'
+          setTimeout(function () {
+            var url = new URL('/', location.origin)
+            url.searchParams.set('_t', Date.now().toString(36))
+            location.replace(url.toString())
+          }, 600)
+        }
+
+        var jobs = []
+        if ('serviceWorker' in navigator) {
+          jobs.push(
+            navigator.serviceWorker.getRegistrations()
+              .then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister().catch(function () {}) }))
+              })
+              .catch(function () {})
+          )
+        }
+        if ('caches' in self) {
+          jobs.push(
+            caches.keys()
+              .then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k).catch(function () { return false }) })) })
+              .catch(function () {})
+          )
+        }
+        try { localStorage.removeItem('amodel.locale') } catch (_e) {}
+
+        Promise.all(jobs).then(function () { done('Done. Reloading…') })
+          .catch(function () { done('Could not reset automatically. Please clear your site data manually.') })
+      })()
+    </script>
+  </body>
+</html>

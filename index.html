@@ -8,6 +8,58 @@
     <meta name="theme-color" content="#262624" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Amodel — one API key for Claude, GPT, Gemini and friends." />
     <title>Amodel</title>
+    <script>
+      /*
+       * Pre-boot reset. Runs synchronously BEFORE the SPA bundle loads, so
+       * this works even if the Vue app is broken / cached. Visiting
+       *   amodel.example.com/?force-refresh=1
+       * here unregisters every Service Worker and wipes the Cache Storage
+       * + local storage tied to this origin, then reloads without the
+       * query param. Sole purpose: a user-facing escape hatch that does
+       * NOT depend on any framework code being loadable.
+       */
+      (function () {
+        try {
+          var p = new URLSearchParams(location.search)
+          if (!p.has('force-refresh')) return
+        } catch (_e) { return }
+        document.documentElement.style.background = '#FAF9F5'
+        document.documentElement.style.color = '#1F1E1B'
+        document.body && (document.body.innerHTML =
+          '<div style="font:14px/1.5 system-ui;display:flex;height:100vh;align-items:center;justify-content:center;color:#6B6760">Resetting&hellip;</div>')
+
+        var jobs = []
+        if ('serviceWorker' in navigator) {
+          jobs.push(
+            navigator.serviceWorker.getRegistrations()
+              .then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister().catch(function () {}) })) })
+              .catch(function () {})
+          )
+        }
+        if ('caches' in self) {
+          jobs.push(
+            caches.keys()
+              .then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k).catch(function () { return false }) })) })
+              .catch(function () {})
+          )
+        }
+        try { localStorage.removeItem('amodel.locale') } catch (_e) {}
+        // Don't touch the auth token here — losing your session because you
+        // tapped a recovery link would be a hostile UX. SW + caches are the
+        // bits that need wiping.
+
+        Promise.all(jobs).finally(function () {
+          var url = new URL(location.href)
+          url.searchParams.delete('force-refresh')
+          // Cache-buster querystring also defeats any HTTP intermediary that
+          // cached the old HTML.
+          url.searchParams.set('_t', Date.now().toString(36))
+          location.replace(url.toString())
+        })
+        // Halt further script evaluation while we tear things down.
+        throw new Error('Amodel reset in progress')
+      })()
+    </script>
     <style>
       /*
        * Boot splash. Inline so it paints in the very first frame, before
