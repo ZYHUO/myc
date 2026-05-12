@@ -35,6 +35,8 @@ export default {
       filter: 'Filter',
       apply: 'Apply',
       reset: 'Reset',
+      show: 'Show',
+      hide: 'Hide',
     },
     status: {
       active: 'Active',

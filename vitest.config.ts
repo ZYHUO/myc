@@ -8,6 +8,13 @@ import { fileURLToPath, URL } from 'node:url'
 // tests so we skip the plugin to keep cold-start fast.
 export default defineConfig({
   plugins: [vue()],
+  // The runtime watchdog (src/utils/update-check.ts) references these
+  // build-time constants. We don't actually call it from tests, but TS
+  // compilation walks the imports, so the constants must resolve.
+  define: {
+    __APP_VERSION__: JSON.stringify('test'),
+    __APP_BUILT_AT__: JSON.stringify(new Date(0).toISOString()),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

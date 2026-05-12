@@ -1,32 +1,71 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 defineProps<{
   title?: string
 }>()
 
 const model = defineModel<boolean>({ default: false })
+const dialogRef = ref<HTMLElement | null>(null)
+let lastActive: HTMLElement | null = null
 
 function onBackdrop() {
   model.value = false
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') model.value = false
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function focusables(): HTMLElement[] {
+  if (!dialogRef.value) return []
+  return Array.from(dialogRef.value.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((el) => el.offsetParent !== null) // skip hidden
 }
 
-watch(model, (open) => {
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    model.value = false
+    return
+  }
+  if (e.key !== 'Tab') return
+  // Trap focus inside the dialog so Tab doesn't escape to the page underneath.
+  const els = focusables()
+  if (els.length === 0) return
+  const first = els[0]
+  const last = els[els.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && active === first) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
+watch(model, async (open) => {
   if (open) {
+    lastActive = document.activeElement as HTMLElement | null
     document.addEventListener('keydown', onKeydown)
     document.body.style.overflow = 'hidden'
+    // Auto-focus the first input (or focusable element) so keyboard users can
+    // start typing immediately. nextTick lets Vue render the dialog body first.
+    await nextTick()
+    const els = focusables()
+    // Prefer the first text input over the close button; fall back to anything.
+    const target =
+      els.find((el) => el instanceof HTMLInputElement && el.type !== 'hidden') ?? els[0]
+    target?.focus()
   } else {
     document.removeEventListener('keydown', onKeydown)
     document.body.style.overflow = ''
+    // Return focus to whatever element triggered the modal — keeps keyboard
+    // navigation predictable.
+    lastActive?.focus?.()
+    lastActive = null
   }
 })
 
-// Belt-and-suspenders: if the host unmounts while the modal is open, make sure
-// we don't leak the listener or leave the body scroll-locked.
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown)
   document.body.style.overflow = ''
@@ -46,6 +85,7 @@ onBeforeUnmount(() => {
 
         <!-- Dialog -->
         <div
+          ref="dialogRef"
           class="relative w-full max-w-[480px] rounded-xl bg-card border border-border shadow-xl"
           role="dialog"
           aria-modal="true"

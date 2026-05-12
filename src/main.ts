@@ -3,6 +3,7 @@ import { createPinia } from "pinia"
 import router from "./router"
 import { i18n, bootstrapLocale } from "./i18n"
 import { applyInitialTheme } from "./stores/theme"
+import { installUpdateWatchdog } from "./utils/update-check"
 import App from "./App.vue"
 import "./style.css"
 
@@ -15,12 +16,6 @@ app.use(createPinia())
 app.use(router)
 app.use(i18n)
 
-// Wait for two things before mounting:
-//   1. router.isReady — without this, the first render uses a placeholder
-//      route with empty meta, so App.vue flashes the AppLayout (sidebar) for
-//      one frame on public pages.
-//   2. bootstrapLocale — if the user prefers a non-English locale, we lazily
-//      import that chunk before first paint to avoid flashing English text.
 Promise.all([router.isReady(), bootstrapLocale()]).then(() => {
   app.mount("#app")
   // Fade out and remove the boot splash that index.html paints before this
@@ -30,4 +25,9 @@ Promise.all([router.isReady(), bootstrapLocale()]).then(() => {
     splash.classList.add("is-hidden")
     setTimeout(() => splash.remove(), 280)
   }
+  // Now that the app is interactive, arm the update watchdog. It does an
+  // initial /version.json fetch in 5 s, then re-checks every minute (and
+  // whenever the tab becomes visible). Users never have to clear caches
+  // manually — see src/utils/update-check.ts for the full mechanism.
+  installUpdateWatchdog()
 })

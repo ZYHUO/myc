@@ -97,6 +97,17 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+  // Scroll behaviour: on a fresh navigation, jump to the top so users don't
+  // land halfway down a different view. On browser back/forward, restore
+  // the previous position. `behavior: 'smooth'` is intentionally OFF for
+  // forward navigations — instant scrollTo feels snappier than a swooping
+  // animation when the page swap itself is already animated by the
+  // RouterView Transition.
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, top: 80 }
+    return { top: 0 }
+  },
 })
 
 router.beforeEach(async (to) => {

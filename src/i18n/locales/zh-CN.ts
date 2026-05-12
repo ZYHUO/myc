@@ -32,6 +32,8 @@ export default {
       filter: '筛选',
       apply: '应用',
       reset: '重置',
+      show: '显示',
+      hide: '隐藏',
     },
     status: {
       active: '使用中',

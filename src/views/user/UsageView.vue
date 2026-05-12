@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { UiCard, UiTable, UiStatusDot, UiInput, UiPagination, UiSkeleton, UiEmptyState } from '@/components/ui'
+import { UiCard, UiTable, UiStatusDot, UiInput, UiPagination, UiSkeleton, UiEmptyState, UiSelect } from '@/components/ui'
 import { getUsageLogs, getUsageStats } from '@/api/usage'
 import type { UsageLog, UsageStats } from '@/api/usage'
 
@@ -120,27 +120,21 @@ const statCards = computed(() => [
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.to') }}</label>
           <UiInput v-model="dateTo" type="date" @update:model-value="handleFilterChange" />
         </div>
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1 min-w-[180px]">
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.model') }}</label>
-          <select
+          <UiSelect
             v-model="modelFilter"
-            class="h-10 rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
-            @change="handleFilterChange"
-          >
-            <option value="">{{ t('usage.filters.allModels') }}</option>
-            <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
-          </select>
+            :options="[{ value: '', label: t('usage.filters.allModels') }, ...modelOptions.map((m) => ({ value: m, label: m }))]"
+            @update:model-value="handleFilterChange"
+          />
         </div>
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1 min-w-[180px]">
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium">{{ t('usage.filters.key') }}</label>
-          <select
+          <UiSelect
             v-model="keyFilter"
-            class="h-10 rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
-            @change="handleFilterChange"
-          >
-            <option value="">{{ t('usage.filters.allKeys') }}</option>
-            <option v-for="k in keyOptions" :key="k" :value="k">{{ k }}</option>
-          </select>
+            :options="[{ value: '', label: t('usage.filters.allKeys') }, ...keyOptions.map((k) => ({ value: k, label: k }))]"
+            @update:model-value="handleFilterChange"
+          />
         </div>
       </div>
     </UiCard>

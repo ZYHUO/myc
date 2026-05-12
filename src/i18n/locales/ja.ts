@@ -32,6 +32,8 @@ export default {
       filter: 'フィルター',
       apply: '適用',
       reset: 'リセット',
+      show: '表示',
+      hide: '非表示',
     },
     status: {
       active: '有効',

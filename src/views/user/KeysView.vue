@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { UiCard, UiButton, UiTable, UiStatusDot, UiBadge, UiCopyButton, UiModal, UiInput } from '@/components/ui'
+import { UiCard, UiButton, UiTable, UiStatusDot, UiBadge, UiCopyButton, UiModal, UiInput, UiSelect } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
 import { getKeys, createKey, deleteKey } from '@/api/keys'
 import type { ApiKey } from '@/api/keys'
@@ -200,12 +200,11 @@ function maskKey(key: string): string {
         </div>
         <div>
           <label class="text-[11px] uppercase tracking-[0.18em] text-muted-fg font-medium mb-1.5 block">{{ t('keys.modal.groupLabel') }}</label>
-          <select
+          <UiSelect
             v-model="newKeyGroupId"
-            class="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-fg outline-none transition-colors duration-150 focus:border-ring focus:ring-1 focus:ring-ring"
-          >
-            <option v-for="g in availableGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
-          </select>
+            :options="availableGroups.map((g) => ({ value: g.id, label: g.name }))"
+            :placeholder="t('keys.modal.groupLabel')"
+          />
         </div>
       </div>
       <template #footer>
