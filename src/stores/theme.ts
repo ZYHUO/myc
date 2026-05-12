@@ -14,8 +14,13 @@ function loadInitial(): Theme {
   return 'system'
 }
 
-function resolveEffective(t: Theme): 'light' | 'dark' {
+/**
+ * Pure resolver, exported for unit tests. The `prefersDark` argument lets
+ * tests inject the OS preference without needing to stub `matchMedia`.
+ */
+export function resolveEffective(t: Theme, prefersDark?: boolean): 'light' | 'dark' {
   if (t === 'system') {
+    if (typeof prefersDark === 'boolean') return prefersDark ? 'dark' : 'light'
     if (typeof window === 'undefined' || !window.matchMedia) return 'light'
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }

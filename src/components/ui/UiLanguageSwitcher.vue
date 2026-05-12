@@ -15,9 +15,11 @@ const shortLabel = computed(() => {
   return 'EN'
 })
 
-function pick(loc: SupportedLocale) {
-  setLocale(loc)
+async function pick(loc: SupportedLocale) {
   open.value = false
+  // Awaited so the optional dynamic import resolves before we hand control back.
+  // Errors are non-fatal — vue-i18n keeps the previous locale if the import fails.
+  try { await setLocale(loc) } catch { /* network blip; stay put */ }
 }
 
 function onDocClick(e: MouseEvent) {

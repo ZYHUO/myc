@@ -1,7 +1,5 @@
 import { createI18n } from 'vue-i18n'
 import en from './locales/en'
-import zhCN from './locales/zh-CN'
-import ja from './locales/ja'
 
 export type SupportedLocale = 'en' | 'zh-CN' | 'ja'
 
@@ -11,8 +9,7 @@ const STORAGE_KEY = 'amodel.locale'
 
 /**
  * Decide which locale to start with: user choice in localStorage trumps
- * everything; otherwise we sniff `navigator.language` and pick the best
- * match; English is the final fallback.
+ * everything; otherwise sniff `navigator.language`; English is the fallback.
  */
 function detectLocale(): SupportedLocale {
   if (typeof window !== 'undefined') {
@@ -27,15 +24,27 @@ function detectLocale(): SupportedLocale {
   return 'en'
 }
 
+/**
+ * English is bundled into the main chunk (it's the fallback and any missing
+ * key in another locale falls back to it). The other locales are dynamic
+ * imports so Vite splits them into their own chunks loaded only when the
+ * user selects them. Net: ~2 KB gzip off the initial bundle.
+ */
+const lazyLoaders: Record<Exclude<SupportedLocale, 'en'>, () => Promise<{ default: typeof en }>> = {
+  'zh-CN': () => import('./locales/zh-CN'),
+  ja: () => import('./locales/ja'),
+}
+
+const loaded = new Set<SupportedLocale>(['en'])
+
 export const i18n = createI18n({
   legacy: false,
-  locale: detectLocale(),
+  locale: 'en',                   // overwritten below once we know the target
   fallbackLocale: 'en',
-  messages: {
-    en,
-    'zh-CN': zhCN,
-    ja,
-  },
+  // Empty placeholders for the lazy locales keep vue-i18n's locale-type
+  // inference broad — without them `locale.value = 'zh-CN'` becomes a TS
+  // error because the union narrows to just 'en'.
+  messages: { en, 'zh-CN': {}, ja: {} },
   // We render plenty of dynamic UI text from API responses; not every key has
   // a translation, and missing keys are fine — vue-i18n's warnings just spam
   // the console.
@@ -43,16 +52,40 @@ export const i18n = createI18n({
   fallbackWarn: false,
 })
 
-export function setLocale(loc: SupportedLocale) {
+async function ensureLoaded(loc: SupportedLocale): Promise<void> {
+  if (loaded.has(loc)) return
+  if (loc === 'en') return  // already in initial bundle
+  const mod = await lazyLoaders[loc]()
+  i18n.global.setLocaleMessage(loc, mod.default)
+  loaded.add(loc)
+}
+
+export async function setLocale(loc: SupportedLocale): Promise<void> {
+  await ensureLoaded(loc)
   i18n.global.locale.value = loc
   if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, loc)
+    try { window.localStorage.setItem(STORAGE_KEY, loc) } catch { /* localStorage may be blocked */ }
     document.documentElement.lang = loc
   }
 }
 
-// Keep <html lang> in sync on first render so screen readers and Tailwind
-// `lang:` selectors (if any) get the right value.
-if (typeof window !== 'undefined') {
-  document.documentElement.lang = i18n.global.locale.value
+/**
+ * Called from main.ts before app.mount() so the first paint uses the right
+ * locale. If it's not English, we await the dynamic import — a tiny delay
+ * (~50 ms over a fast connection) but avoids a flash of English content.
+ */
+export async function bootstrapLocale(): Promise<void> {
+  const target = detectLocale()
+  if (target !== 'en') {
+    try {
+      await ensureLoaded(target)
+    } catch {
+      // Network failed — stay on English, the fallback.
+      return
+    }
+  }
+  i18n.global.locale.value = target
+  if (typeof window !== 'undefined') {
+    document.documentElement.lang = target
+  }
 }

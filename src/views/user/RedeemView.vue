@@ -66,6 +66,12 @@ function statusVariant(status: RedeemHistory['status']): BadgeVariant {
   if (status === 'expired') return 'gray'
   return 'red'
 }
+
+function localizedStatus(status: RedeemHistory['status']): string {
+  if (status === 'success') return t('common.status.completed')
+  if (status === 'expired') return t('common.status.expired')
+  return t('common.status.failed')
+}
 </script>
 
 <template>
@@ -117,7 +123,7 @@ function statusVariant(status: RedeemHistory['status']): BadgeVariant {
             <td class="px-4 py-3 text-sm">{{ item.reward }}</td>
             <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(item.date) }}</td>
             <td class="px-4 py-3">
-              <UiBadge :variant="statusVariant(item.status)">{{ item.status }}</UiBadge>
+              <UiBadge :variant="statusVariant(item.status)">{{ localizedStatus(item.status) }}</UiBadge>
             </td>
           </tr>
         </tbody>

@@ -73,7 +73,8 @@ function buildReferralLink(code: string): string {
   return `${origin}/register?aff=${encodeURIComponent(code)}`
 }
 
-function mapInvitee(raw: UpstreamInvitee): { user: string; joinedAt: string; rebate: number } {
+// Exported for unit tests. Used in-module by getAffiliateData.
+export function mapInvitee(raw: UpstreamInvitee): { user: string; joinedAt: string; rebate: number } {
   const display = raw.username || raw.email || (raw.user_id ? `user_${raw.user_id}` : 'unknown')
   return {
     user: display,
