@@ -21,7 +21,18 @@ export interface ChannelMonitor {
    * `unknown`  → no check has run yet, or upstream returned no state
    */
   status: 'healthy' | 'degraded' | 'down' | 'unknown'
+  /**
+   * REAL recent health-check results, oldest first. Variable length (0..N) —
+   * we render exactly the points sub2api returned, no synthetic fill. An
+   * empty array means no checks have happened yet for this channel.
+   */
   uptimeHistory: ('up' | 'down' | 'degraded')[]
+  /**
+   * Human-readable caption describing what `uptimeHistory` actually covers
+   * (e.g. "10 checks · last 6m"). Surfaced under the bars so the user knows
+   * the time density of the data they're looking at.
+   */
+  uptimeSpanLabel: string
 }
 
 // ─── Upstream shapes (what sub2api actually returns) ────────────────────────
@@ -92,6 +103,9 @@ const MOCK_MONITORS: ChannelMonitor[] = MOCK_CHANNELS.map((ch) => ({
   latency: Math.floor(Math.random() * 400) + 50,
   status: ch.status === 'online' ? 'healthy' : ch.status === 'degraded' ? 'degraded' : 'down',
   uptimeHistory: generateMockUptime(),
+  // Overridden at `getChannelMonitors` time with a translated string; this
+  // placeholder just keeps the type strict.
+  uptimeSpanLabel: '',
 }))
 
 // ─── Mappers ────────────────────────────────────────────────────────────────
@@ -117,11 +131,83 @@ function mapChannel(raw: UpstreamAvailableChannel): Channel {
 }
 
 /**
- * Build a 30-element uptime history (oldest first, today last) from sub2api's
- * sparse timeline plus the availability_*_d aggregates. Days where we have
- * real bucket data win; days without data are seeded from the matching
- * availability window, deterministically per channel + hour so refreshing the
- * page doesn't flicker the colors.
+ * Convert sub2api's `timeline` array into bars suitable for the StatusView.
+ *
+ * IMPORTANT: this function deliberately does NOT synthesise data. The
+ * previous version (still callable as `synthesizeUptime30d` below for tests)
+ * filled empty 30-day buckets via a deterministic pseudo-random function
+ * keyed on the channel id + availability stat. That produced a slick-looking
+ * Slack-style uptime strip where, in practice, most of the bars were
+ * fiction — a channel with availability_7d=100 and one real check today
+ * showed 30 green bars, with 29 of them invented. Misleading.
+ *
+ * What this returns instead:
+ *   - Exactly the real timeline points sub2api gave us, oldest first.
+ *   - If sub2api returned > MAX_BARS points, we take an evenly-spaced
+ *     sample so the strip stays readable.
+ *   - `[]` when there's no timeline data at all (the UI should show an
+ *     empty state, not invent bars).
+ */
+const MAX_BARS = 30
+
+function mapTimelineStatus(s: string | undefined): 'up' | 'down' | 'degraded' {
+  if (!s) return 'down'
+  if (s === 'operational' || s === 'healthy' || s === 'up' || s === 'ok') return 'up'
+  if (s === 'degraded') return 'degraded'
+  return 'down'
+}
+
+export function buildUptimeBars(timeline: UpstreamTimelinePoint[] | undefined): ('up' | 'down' | 'degraded')[] {
+  if (!timeline || timeline.length === 0) return []
+  // sub2api emits the newest point last; sort defensively in case of fork
+  // deployments that reverse the order.
+  const sorted = [...timeline]
+    .filter((p) => !!p.checked_at)
+    .sort((a, b) => (a.checked_at! < b.checked_at! ? -1 : 1))
+  if (sorted.length <= MAX_BARS) {
+    return sorted.map((p) => mapTimelineStatus(p.status))
+  }
+  // Down-sample to MAX_BARS bars, preserving newest at the right edge.
+  const stride = sorted.length / MAX_BARS
+  const out: ('up' | 'down' | 'degraded')[] = []
+  for (let i = 0; i < MAX_BARS; i++) {
+    out.push(mapTimelineStatus(sorted[Math.floor(i * stride)].status))
+  }
+  return out
+}
+
+/**
+ * Format a "10 checks · last 6m" caption from the timeline metadata. We do
+ * it in TS rather than i18n templating because the duration unit is
+ * computed at runtime (m / h / d).
+ */
+function buildSpanLabel(
+  timeline: UpstreamTimelinePoint[] | undefined,
+  now: number,
+  t: (key: string, payload?: Record<string, unknown>) => string,
+): string {
+  if (!timeline || timeline.length === 0) return t('status.noChecks')
+  const stamps = timeline
+    .map((p) => (p.checked_at ? new Date(p.checked_at).getTime() : NaN))
+    .filter((n) => !Number.isNaN(n))
+    .sort((a, b) => a - b)
+  if (stamps.length === 0) return t('status.noChecks')
+
+  const spanMs = now - stamps[0]
+  let timeAgo: string
+  if (spanMs < 60 * 60_000) timeAgo = t('common.timeAgo.minute', { n: Math.max(1, Math.round(spanMs / 60_000)) })
+  else if (spanMs < 24 * 60 * 60_000) timeAgo = t('common.timeAgo.hour', { n: Math.max(1, Math.round(spanMs / (60 * 60_000))) })
+  else timeAgo = t('common.timeAgo.day', { n: Math.max(1, Math.round(spanMs / (24 * 60 * 60_000))) })
+
+  return t('status.spanLabel', { n: timeline.length, span: timeAgo })
+}
+
+/**
+ * Kept for backwards-compat with vitest table-driven tests in
+ * src/api/__tests__/channels.test.ts. New callers should use
+ * `buildUptimeBars`. The 30-bucket synthesis behaviour is preserved here
+ * verbatim because removing it would break the test fixtures; the
+ * production path no longer uses it.
  */
 export function synthesizeUptime30d(
   m: UpstreamMonitor,
@@ -135,24 +221,21 @@ export function synthesizeUptime30d(
   const buckets = Array.from({ length: 30 }, () => ({ up: 0, down: 0, degraded: 0 }))
   for (const p of m.timeline ?? []) {
     if (!p.checked_at) continue
-    const t = new Date(p.checked_at).getTime()
-    if (Number.isNaN(t) || t < cutoff) continue
-    const idx = Math.floor((t - cutoff) / oneDay)
+    const tt = new Date(p.checked_at).getTime()
+    if (Number.isNaN(tt) || tt < cutoff) continue
+    const idx = Math.floor((tt - cutoff) / oneDay)
     if (idx < 0 || idx >= 30) continue
     const b = buckets[idx]
-    if (p.status === 'up' || p.status === 'healthy') b.up++
+    if (p.status === 'up' || p.status === 'healthy' || p.status === 'operational') b.up++
     else if (p.status === 'degraded') b.degraded++
     else b.down++
   }
 
-  // Deterministic seed: channel id × Knuth multiplier, bucketed per hour so
-  // identical reloads stay stable but the synthesized texture refreshes daily.
   let seed = ((m.id || 0) * 2654435761 + Math.floor(now / 3_600_000)) >>> 0
   const rand = () => {
     seed = (seed * 16807) % 2147483647
     return seed / 2147483647
   }
-
   const pick = (availPercent: number): 'up' | 'down' | 'degraded' => {
     const r = rand() * 100
     if (availPercent >= 99) return 'up'
@@ -171,14 +254,13 @@ export function synthesizeUptime30d(
     else out[i] = 'up'
   }
 
-  const fill = (lo: number, hi: number, avail: number | undefined) => {
+  const fill = (lo: number, hi: number, avail: number | null | undefined) => {
     const a = typeof avail === 'number' ? avail : 100
     for (let i = lo; i < hi; i++) {
       if (out[i]) continue
       out[i] = pick(a)
     }
   }
-  // Index 0 is 30 days ago, index 29 is today.
   fill(0, 15, m.availability_30d ?? m.availability_15d ?? m.availability_7d ?? 100)
   fill(15, 23, m.availability_15d ?? m.availability_7d ?? 100)
   fill(23, 30, m.availability_7d ?? 100)
@@ -203,7 +285,14 @@ function statusFromPrimary(s: string | undefined | null): ChannelMonitor['status
   return 'unknown'
 }
 
-function mapMonitor(raw: UpstreamMonitor): ChannelMonitor {
+/**
+ * Translator callback the view layer passes in. Decoupling lets us call
+ * `getChannelMonitors()` from anywhere without `vue-i18n` being imported,
+ * and keeps the API layer free of view-layer dependencies.
+ */
+type TranslateFn = (key: string, payload?: Record<string, unknown>) => string
+
+function mapMonitor(raw: UpstreamMonitor, t: TranslateFn, now: number): ChannelMonitor {
   // Pick whichever availability number the deployment actually populates.
   // Most operators only collect 7-day data; 15d and 30d are commonly null.
   const availability =
@@ -215,7 +304,8 @@ function mapMonitor(raw: UpstreamMonitor): ChannelMonitor {
     availability: Number(availability.toFixed(2)),
     latency: Math.round(latencyRaw ?? 0),
     status: statusFromPrimary(raw.primary_status),
-    uptimeHistory: synthesizeUptime30d(raw),
+    uptimeHistory: buildUptimeBars(raw.timeline),
+    uptimeSpanLabel: buildSpanLabel(raw.timeline, now, t),
   }
 }
 
@@ -233,14 +323,28 @@ export async function getChannels(): Promise<Channel[]> {
   return items.map(mapChannel)
 }
 
-export async function getChannelMonitors(): Promise<ChannelMonitor[]> {
+/**
+ * @param translate i18n `t` function so the span caption matches the active
+ *   locale ("10 checks · last 6m" vs "10 次检测 · 最近 6 分钟"). Pass
+ *   `useI18n().t` from the calling view.
+ * @param now Optional clock-injection point for tests.
+ */
+export async function getChannelMonitors(
+  translate?: TranslateFn,
+  now: number = Date.now(),
+): Promise<ChannelMonitor[]> {
+  const t: TranslateFn = translate ?? ((k) => k)
   if (isMockMode()) {
     await delay()
-    return MOCK_MONITORS.map((m) => ({ ...m, uptimeHistory: [...m.uptimeHistory] }))
+    return MOCK_MONITORS.map((m) => ({
+      ...m,
+      uptimeHistory: [...m.uptimeHistory],
+      uptimeSpanLabel: t('status.spanLabel', { n: m.uptimeHistory.length, span: t('common.timeAgo.day', { n: 30 }) }),
+    }))
   }
   const body = unwrap<UpstreamMonitor[] | { items?: UpstreamMonitor[] }>(
     await client.get('/channel-monitors'),
   )
   const items = Array.isArray(body) ? body : body?.items ?? []
-  return items.map(mapMonitor)
+  return items.map((raw) => mapMonitor(raw, t, now))
 }

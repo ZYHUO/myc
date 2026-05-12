@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { synthesizeUptime30d } from '../channels'
+import { buildUptimeBars, synthesizeUptime30d } from '../channels'
 
 // Pin "now" to a stable wall-clock so day-bucket math is deterministic across CI machines.
 // The function buckets by *local midnight* — happy-dom inherits the host TZ, so we lock the
@@ -153,5 +153,60 @@ describe('synthesizeUptime30d', () => {
     } as unknown as Parameters<typeof synthesizeUptime30d>[0]
     expect(() => synthesizeUptime30d(m, NOW)).not.toThrow()
     expect(synthesizeUptime30d(m, NOW).every((s) => s === 'up')).toBe(true)
+  })
+})
+
+describe('buildUptimeBars', () => {
+  // sub2api's `timeline` shape: { status, latency_ms, checked_at }.
+  const at = (iso: string, status = 'operational') => ({
+    status,
+    latency_ms: 100,
+    checked_at: iso,
+  })
+
+  it('returns empty array when timeline is missing or empty', () => {
+    expect(buildUptimeBars(undefined)).toEqual([])
+    expect(buildUptimeBars([])).toEqual([])
+  })
+
+  it('maps operational → up, degraded → degraded, failed/error → down', () => {
+    const out = buildUptimeBars([
+      at('2026-05-12T22:51:01Z', 'operational'),
+      at('2026-05-12T22:52:01Z', 'degraded'),
+      at('2026-05-12T22:53:01Z', 'failed'),
+      at('2026-05-12T22:54:01Z', 'error'),
+    ])
+    expect(out).toEqual(['up', 'degraded', 'down', 'down'])
+  })
+
+  it('preserves chronological order (oldest first)', () => {
+    // Pass in reverse-order to confirm sorting actually happens.
+    const out = buildUptimeBars([
+      at('2026-05-12T22:54:00Z', 'failed'),
+      at('2026-05-12T22:53:00Z', 'degraded'),
+      at('2026-05-12T22:52:00Z', 'operational'),
+    ])
+    expect(out).toEqual(['up', 'degraded', 'down'])
+  })
+
+  it('down-samples to at most 30 entries when the timeline is huge', () => {
+    const hundred = Array.from({ length: 100 }, (_, i) =>
+      at(`2026-05-12T${String(10 + Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00Z`),
+    )
+    const out = buildUptimeBars(hundred)
+    expect(out.length).toBe(30)
+    expect(out.every((s) => s === 'up')).toBe(true)
+  })
+
+  it('keeps EXACT real data — no padding to 30 when timeline is short', () => {
+    // The "fake green bars" bug: this used to return 30 entries no matter
+    // what. Lock the regression by asserting the array length matches the
+    // count of real points.
+    const out = buildUptimeBars([
+      at('2026-05-12T22:51:01Z'),
+      at('2026-05-12T22:52:01Z'),
+      at('2026-05-12T22:53:01Z'),
+    ])
+    expect(out.length).toBe(3)
   })
 })

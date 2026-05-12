@@ -13,7 +13,9 @@ const { t, locale } = useI18n()
 
 async function fetchMonitors() {
   try {
-    monitors.value = await getChannelMonitors()
+    // Pass the active `t` so the per-card "10 checks · last 6m" caption
+    // localizes correctly when the user flips the language switcher.
+    monitors.value = await getChannelMonitors(t)
     lastRefresh.value = new Date()
   } catch {
     // Silent: keep prior data, refresh will retry on next interval.
@@ -106,14 +108,21 @@ function formatRefreshTime(d: Date): string {
           </div>
         </div>
 
-        <!-- Uptime Bar -->
-        <div class="flex gap-0.5 mt-5">
-          <div
-            v-for="(seg, i) in m.uptimeHistory"
-            :key="i"
-            class="flex-1 h-6 rounded-sm transition-colors duration-150"
-            :class="uptimeSegmentColor(seg)"
-          />
+        <!-- Uptime bars: ONE bar per real health check, not a fake 30-day
+             strip. When the upstream has no timeline data we show an empty
+             state instead of inventing green bars from the availability %. -->
+        <div class="mt-5">
+          <div v-if="m.uptimeHistory.length > 0" class="flex gap-0.5">
+            <div
+              v-for="(seg, i) in m.uptimeHistory"
+              :key="i"
+              class="flex-1 h-6 rounded-sm transition-colors duration-150"
+              :class="uptimeSegmentColor(seg)"
+              :title="seg"
+            />
+          </div>
+          <div v-else class="h-6 rounded-sm bg-muted/40" />
+          <p class="mt-2 text-[11px] uppercase tracking-[0.15em] text-muted-fg tabular-nums">{{ m.uptimeSpanLabel }}</p>
         </div>
       </UiCard>
     </div>

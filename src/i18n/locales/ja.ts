@@ -207,11 +207,13 @@ export default {
   status: {
     eyebrow: 'ステータス',
     title: 'チャネル監視',
-    subtitle: '各上流チャネルの過去 30 日間の稼働状況。',
+    subtitle: '各上流チャネルのリアルタイム健全性。下のバーは実際の最近のチェックのみで、合成データは一切含みません。',
     availability: '稼働率（7 日）',
     latency: 'レイテンシ',
     empty: '監視対象のチャネルがありません。',
     loadFailed: '監視の読み込みに失敗しました',
+    spanLabel: '{n} 回 · 直近 {span}',
+    noChecks: 'チェック履歴なし',
     legend: {
       up: '正常',
       degraded: '低下',

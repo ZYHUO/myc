@@ -207,11 +207,13 @@ export default {
   status: {
     eyebrow: '状态',
     title: '渠道监控',
-    subtitle: '过去 30 天每个上游渠道的可用率。',
+    subtitle: '上游渠道的实时健康检查。下方条形图来自真实最近检测记录，不做任何合成填充。',
     availability: '可用率（7 天）',
     latency: '延迟',
     empty: '尚未配置任何渠道监控。',
     loadFailed: '加载监控失败',
+    spanLabel: '{n} 次检测 · 最近 {span}',
+    noChecks: '暂无检测记录',
     legend: {
       up: '正常',
       degraded: '降级',

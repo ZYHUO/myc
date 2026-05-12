@@ -213,11 +213,13 @@ export default {
   status: {
     eyebrow: 'STATUS',
     title: 'Channel monitor',
-    subtitle: 'Last 30 days of uptime for each upstream channel.',
+    subtitle: 'Real-time health of each upstream channel. The bars below each card show actual recent health checks — no synthetic data.',
     availability: 'Availability (7d)',
     latency: 'Latency',
     empty: 'No channel monitors configured.',
     loadFailed: 'Failed to load monitors',
+    spanLabel: '{n} checks · last {span}',
+    noChecks: 'No checks yet',
     legend: {
       up: 'Up',
       degraded: 'Degraded',
