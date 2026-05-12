@@ -3,16 +3,17 @@ import { ref, onMounted } from 'vue'
 import { UiTable, UiBadge, UiButton } from '@/components/ui'
 import type { BadgeVariant } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
-import { getOrders, refundOrder, type Order } from '@/api/orders'
+import * as payment from '@/api/payment'
 
-const orders = ref<Order[]>([])
+const orders = ref<payment.PaymentOrder[]>([])
 const loading = ref(true)
 const toast = useToast()
 const { confirm } = useConfirm()
 
 onMounted(async () => {
   try {
-    orders.value = await getOrders()
+    const result = await payment.getMyOrders({ page: 1, page_size: 50 })
+    orders.value = result.items
   } catch {
     toast.error('Failed to load orders')
   } finally {
@@ -20,24 +21,28 @@ onMounted(async () => {
   }
 })
 
-async function handleRefund(order: Order) {
+async function handleRefund(order: payment.PaymentOrder) {
   const confirmed = await confirm({
     title: 'Request Refund',
-    message: `Are you sure you want to request a refund for order ${order.id} (¥${order.amount.toFixed(2)})?`,
+    message: `Are you sure you want to request a refund for order ${order.out_trade_no} ($${order.amount.toFixed(2)})?`,
     variant: 'danger',
   })
   if (!confirmed) return
   try {
-    const updated = await refundOrder(order.id)
+    await payment.requestRefund(String(order.id))
+    // Optimistic: server may async-process; reflect immediately and re-fetch.
     const idx = orders.value.findIndex((o) => o.id === order.id)
-    if (idx !== -1) orders.value[idx] = updated
-    toast.success('Refund request submitted successfully')
+    if (idx !== -1) orders.value[idx] = { ...orders.value[idx], status: 'refunded' }
+    toast.success('Refund request submitted')
+    const result = await payment.getMyOrders({ page: 1, page_size: 50 })
+    orders.value = result.items
   } catch {
     toast.error('Refund request failed')
   }
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | undefined): string {
+  if (!iso) return '—'
   return new Date(iso).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -47,8 +52,8 @@ function formatDate(iso: string): string {
   })
 }
 
-function statusVariant(status: Order['status']): BadgeVariant {
-  if (status === 'completed') return 'green'
+function statusVariant(status: payment.PaymentOrder['status']): BadgeVariant {
+  if (status === 'paid' || status === 'completed') return 'green'
   if (status === 'pending') return 'amber'
   if (status === 'refunded') return 'gray'
   return 'red'
@@ -57,20 +62,18 @@ function statusVariant(status: Order['status']): BadgeVariant {
 function formatType(type: string) {
   const map: Record<string, string> = {
     subscription: 'Subscription',
+    recharge: 'Top-up',
     topup: 'Top-up',
-    redeem: 'Redeem',
   }
   return map[type] || type
 }
 
-function formatMethod(method: string) {
-  const map: Record<string, string> = {
-    alipay: 'Alipay',
-    wechat: 'WeChat',
-    card: 'Card',
-    redeem: 'Redeem',
-  }
-  return map[method] || method
+function formatMethod(order: payment.PaymentOrder) {
+  return order.payment_method || order.provider || '—'
+}
+
+function canRefund(status: payment.PaymentOrder['status']): boolean {
+  return status === 'paid' || status === 'completed'
 }
 </script>
 
@@ -85,6 +88,14 @@ function formatMethod(method: string) {
     <!-- Loading -->
     <div v-if="loading" class="space-y-3">
       <div v-for="i in 5" :key="i" class="h-12 rounded-xl border border-border bg-card animate-pulse" />
+    </div>
+
+    <!-- Empty -->
+    <div v-else-if="orders.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center space-y-2">
+      <p class="text-base font-medium">No orders yet</p>
+      <p class="text-sm text-muted-fg">
+        Once you top up your balance or subscribe to a plan, the orders will show up here.
+      </p>
     </div>
 
     <!-- Table -->
@@ -102,16 +113,16 @@ function formatMethod(method: string) {
       </thead>
       <tbody>
         <tr v-for="order in orders" :key="order.id" class="border-b border-border last:border-0 row-hover">
-          <td class="px-4 py-3 font-mono text-sm">{{ order.id }}</td>
+          <td class="px-4 py-3 font-mono text-sm">{{ order.out_trade_no }}</td>
           <td class="px-4 py-3 text-sm">{{ formatType(order.type) }}</td>
-          <td class="px-4 py-3 font-mono text-sm tabular-nums">¥{{ order.amount.toFixed(2) }}</td>
+          <td class="px-4 py-3 font-mono text-sm tabular-nums">${{ order.amount.toFixed(2) }}</td>
           <td class="px-4 py-3">
             <UiBadge :variant="statusVariant(order.status)">{{ order.status }}</UiBadge>
           </td>
-          <td class="px-4 py-3 text-sm">{{ formatMethod(order.paymentMethod) }}</td>
-          <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(order.createdAt) }}</td>
+          <td class="px-4 py-3 text-sm">{{ formatMethod(order) }}</td>
+          <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(order.created_at) }}</td>
           <td class="px-4 py-3">
-            <UiButton v-if="order.status === 'completed'" variant="ghost" size="sm" class="text-destructive" @click="handleRefund(order)">
+            <UiButton v-if="canRefund(order.status)" variant="ghost" size="sm" class="text-destructive" @click="handleRefund(order)">
               Refund
             </UiButton>
           </td>

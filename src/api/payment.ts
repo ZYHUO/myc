@@ -1,17 +1,34 @@
 import client from './client'
+import { delay, isMockMode, unwrap } from './_util'
 
-// ─── Types ───
+// ─── Public types (what views consume) ──────────────────────────────────────
+
 export interface PaymentConfig {
+  enabled: boolean
+  /** Minimum top-up amount (USD). */
+  min_amount: number
+  /** Maximum top-up amount (USD). 0 means no upper bound. */
+  max_amount: number
+  /** Daily aggregate cap (USD). 0 means unlimited. */
+  daily_limit: number
+  order_timeout_minutes: number
+  max_pending_orders: number
   enabled_payment_types: string[]
-  min_recharge_amount: number
-  max_recharge_amount: number
-  currency: string
+  /** Multiplier applied to balance top-ups (1.0 = pay $10 get $10, 1.2 = bonus). */
+  balance_recharge_multiplier: number
+  /** Fee rate as decimal (0.02 = 2%). */
+  recharge_fee_rate: number
+  product_name_prefix: string
+  product_name_suffix: string
+  help_text: string
+  help_image_url: string
 }
 
 export interface PaymentPlan {
   id: number
   group_id: number
   group_platform: string
+  group_name?: string
   name: string
   description: string
   price: number
@@ -25,10 +42,20 @@ export interface PaymentPlan {
 }
 
 export interface PaymentChannel {
+  id: number
+  /** Stable string identifier used as the `provider` field on order creation. */
   key: string
   name: string
-  icon: string
+  description?: string
   enabled: boolean
+  group_ids?: number[]
+}
+
+export interface PaymentLimits {
+  min_amount: number
+  max_amount: number
+  /** Per-method limits when present, e.g. {alipay: {min, max}}. */
+  methods?: Record<string, { min?: number; max?: number }>
 }
 
 export interface PaymentOrder {
@@ -36,9 +63,9 @@ export interface PaymentOrder {
   out_trade_no: string
   type: 'recharge' | 'subscription'
   amount: number
-  status: 'pending' | 'completed' | 'cancelled' | 'refunded' | 'expired'
+  status: 'pending' | 'paid' | 'completed' | 'cancelled' | 'refunded' | 'expired' | 'failed'
   provider: string
-  payment_method: string
+  payment_method?: string
   plan_id?: number
   plan_name?: string
   created_at: string
@@ -50,8 +77,9 @@ export interface CreateOrderRequest {
   type: 'recharge' | 'subscription'
   amount?: number
   plan_id?: number
-  provider: string
-  payment_method?: string
+  /** sub2api uses `channel_id` server-side; we accept either provider string or numeric channel. */
+  channel_id?: number
+  provider?: string
 }
 
 export interface CreateOrderResponse {
@@ -59,7 +87,7 @@ export interface CreateOrderResponse {
   out_trade_no: string
   pay_url?: string
   qr_code?: string
-  client_secret?: string // Stripe
+  client_secret?: string
   deeplink?: string
 }
 
@@ -71,59 +99,200 @@ export interface CheckoutInfo {
   currency: string
 }
 
-export interface PaymentLimits {
-  min_amount: number
-  max_amount: number
-  daily_limit: number
-  daily_used: number
+// ─── Upstream raw shapes ────────────────────────────────────────────────────
+
+interface RawConfig {
+  enabled?: boolean
+  min_amount?: number
+  max_amount?: number
+  daily_limit?: number
+  order_timeout_minutes?: number
+  max_pending_orders?: number
+  enabled_payment_types?: string[] | null
+  balance_recharge_multiplier?: number
+  recharge_fee_rate?: number
+  product_name_prefix?: string
+  product_name_suffix?: string
+  help_text?: string
+  help_image_url?: string
 }
 
-// ─── API Calls ───
+interface RawChannel {
+  ID: number
+  Name: string
+  Description?: string
+  Status: string
+  GroupIDs?: number[] | null
+}
 
-/** Get payment system configuration */
-export const getPaymentConfig = () =>
-  client.get<PaymentConfig>('/payment/config')
+interface RawLimits {
+  global_min?: number
+  global_max?: number
+  methods?: Record<string, { min?: number; max?: number }>
+}
 
-/** Get available subscription plans */
-export const getPlans = () =>
-  client.get<PaymentPlan[]>('/payment/plans')
+interface RawOrdersList<T> {
+  items?: T[]
+  total?: number
+  page?: number
+  page_size?: number
+  pages?: number
+}
 
-/** Get available payment channels */
-export const getChannels = () =>
-  client.get<PaymentChannel[]>('/payment/channels')
+// ─── Mappers ────────────────────────────────────────────────────────────────
 
-/** Get checkout info (fee calculation) */
-export const getCheckoutInfo = (params: { amount?: number; plan_id?: number; provider: string }) =>
-  client.get<CheckoutInfo>('/payment/checkout-info', { params })
+function mapConfig(raw: RawConfig | null | undefined): PaymentConfig {
+  const r = raw ?? {}
+  return {
+    enabled: r.enabled ?? false,
+    min_amount: r.min_amount ?? 0,
+    max_amount: r.max_amount ?? 0,
+    daily_limit: r.daily_limit ?? 0,
+    order_timeout_minutes: r.order_timeout_minutes ?? 30,
+    max_pending_orders: r.max_pending_orders ?? 3,
+    enabled_payment_types: r.enabled_payment_types ?? [],
+    balance_recharge_multiplier: r.balance_recharge_multiplier ?? 1,
+    recharge_fee_rate: r.recharge_fee_rate ?? 0,
+    product_name_prefix: r.product_name_prefix ?? '',
+    product_name_suffix: r.product_name_suffix ?? '',
+    help_text: r.help_text ?? '',
+    help_image_url: r.help_image_url ?? '',
+  }
+}
 
-/** Get payment limits */
-export const getLimits = () =>
-  client.get<PaymentLimits>('/payment/limits')
+function mapChannel(raw: RawChannel): PaymentChannel {
+  return {
+    id: raw.ID,
+    key: String(raw.ID),
+    name: raw.Name,
+    description: raw.Description,
+    enabled: (raw.Status ?? '').toLowerCase() === 'active',
+    group_ids: raw.GroupIDs ?? [],
+  }
+}
 
-/** Create a payment order */
-export const createOrder = (data: CreateOrderRequest) =>
-  client.post<CreateOrderResponse>('/payment/orders', data)
+function mapLimits(raw: RawLimits | null | undefined): PaymentLimits {
+  const r = raw ?? {}
+  return {
+    min_amount: r.global_min ?? 0,
+    max_amount: r.global_max ?? 0,
+    methods: r.methods ?? {},
+  }
+}
 
-/** Get my order list */
-export const getMyOrders = (params?: { page?: number; page_size?: number; status?: string }) =>
-  client.get<{ items: PaymentOrder[]; total: number }>('/payment/orders/my', { params })
+// ─── Mock fixtures ──────────────────────────────────────────────────────────
 
-/** Get single order detail */
-export const getOrder = (id: string) =>
-  client.get<PaymentOrder>(`/payment/orders/${id}`)
+const MOCK_CONFIG: PaymentConfig = {
+  enabled: true,
+  min_amount: 10,
+  max_amount: 1000,
+  daily_limit: 500,
+  order_timeout_minutes: 30,
+  max_pending_orders: 3,
+  enabled_payment_types: ['alipay', 'wechat', 'stripe'],
+  balance_recharge_multiplier: 1,
+  recharge_fee_rate: 0,
+  product_name_prefix: '',
+  product_name_suffix: '',
+  help_text: '',
+  help_image_url: '',
+}
 
-/** Cancel a pending order */
-export const cancelOrder = (id: string) =>
-  client.post(`/payment/orders/${id}/cancel`)
+const MOCK_PLANS: PaymentPlan[] = [
+  { id: 1, group_id: 5, group_platform: 'openai', name: 'Basic', description: 'Casual usage', price: 29, validity_days: 30, validity_unit: 'days', features: '5,000 requests/day', product_name: 'Basic Plan', for_sale: true, sort_order: 1 },
+  { id: 2, group_id: 7, group_platform: 'openai', name: 'Pro', description: 'Power user', price: 79, original_price: 99, validity_days: 30, validity_unit: 'days', features: '50,000 requests/day', product_name: 'Pro Plan', for_sale: true, sort_order: 2 },
+  { id: 3, group_id: 6, group_platform: 'anthropic', name: 'Enterprise', description: 'Unlimited', price: 199, validity_days: 30, validity_unit: 'days', features: 'Unlimited', product_name: 'Enterprise Plan', for_sale: true, sort_order: 3 },
+]
 
-/** Request refund for an order */
-export const requestRefund = (id: string) =>
-  client.post(`/payment/orders/${id}/refund-request`)
+const MOCK_CHANNELS: PaymentChannel[] = [
+  { id: 1, key: 'alipay', name: 'Alipay', enabled: true },
+  { id: 2, key: 'wechat', name: 'WeChat Pay', enabled: true },
+  { id: 3, key: 'stripe', name: 'Stripe', enabled: true },
+]
 
-/** Verify order status (polling) */
-export const verifyOrder = (data: { out_trade_no: string }) =>
-  client.post<{ status: string; paid: boolean }>('/payment/orders/verify', data)
+const MOCK_LIMITS: PaymentLimits = { min_amount: 10, max_amount: 1000, methods: {} }
 
-/** Get refund-eligible providers */
-export const getRefundEligibleProviders = () =>
-  client.get<string[]>('/payment/orders/refund-eligible-providers')
+// ─── API functions ──────────────────────────────────────────────────────────
+
+export async function getPaymentConfig(): Promise<PaymentConfig> {
+  if (isMockMode()) { await delay(); return { ...MOCK_CONFIG } }
+  return mapConfig(unwrap<RawConfig>(await client.get('/payment/config')))
+}
+
+export async function getPlans(): Promise<PaymentPlan[]> {
+  if (isMockMode()) { await delay(); return MOCK_PLANS.map((p) => ({ ...p })) }
+  const body = unwrap<PaymentPlan[] | { items?: PaymentPlan[] }>(await client.get('/payment/plans'))
+  const items = Array.isArray(body) ? body : body?.items ?? []
+  return items.map((p) => ({ ...p }))
+}
+
+export async function getChannels(): Promise<PaymentChannel[]> {
+  if (isMockMode()) { await delay(); return MOCK_CHANNELS.map((c) => ({ ...c })) }
+  const body = unwrap<RawChannel[] | { items?: RawChannel[] }>(await client.get('/payment/channels'))
+  const items = Array.isArray(body) ? body : body?.items ?? []
+  return items.map(mapChannel).filter((c) => c.enabled)
+}
+
+export async function getLimits(): Promise<PaymentLimits> {
+  if (isMockMode()) { await delay(); return { ...MOCK_LIMITS } }
+  return mapLimits(unwrap<RawLimits>(await client.get('/payment/limits')))
+}
+
+export async function getCheckoutInfo(params: { amount?: number; plan_id?: number; provider: string }): Promise<CheckoutInfo> {
+  if (isMockMode()) {
+    await delay()
+    const amount = params.amount ?? 0
+    return { amount, fee: 0, total: amount, provider: params.provider, currency: 'USD' }
+  }
+  return unwrap<CheckoutInfo>(await client.get('/payment/checkout-info', { params }))
+}
+
+export async function createOrder(data: CreateOrderRequest): Promise<CreateOrderResponse> {
+  if (isMockMode()) {
+    await delay(500)
+    return {
+      order_id: `mock_${Date.now()}`,
+      out_trade_no: `MOCK${Date.now()}`,
+      pay_url: 'https://example.com/mock-pay',
+    }
+  }
+  return unwrap<CreateOrderResponse>(await client.post('/payment/orders', data))
+}
+
+export async function getMyOrders(params?: { page?: number; page_size?: number; status?: string }): Promise<{ items: PaymentOrder[]; total: number }> {
+  if (isMockMode()) {
+    await delay()
+    return { items: [], total: 0 }
+  }
+  const body = unwrap<RawOrdersList<PaymentOrder>>(await client.get('/payment/orders/my', { params }))
+  return { items: body.items ?? [], total: body.total ?? 0 }
+}
+
+export async function getOrder(id: string): Promise<PaymentOrder> {
+  if (isMockMode()) {
+    await delay()
+    throw new Error('Order not found (mock mode)')
+  }
+  return unwrap<PaymentOrder>(await client.get(`/payment/orders/${id}`))
+}
+
+export async function cancelOrder(id: string): Promise<void> {
+  if (isMockMode()) { await delay(); return }
+  await client.post(`/payment/orders/${id}/cancel`)
+}
+
+export async function requestRefund(id: string): Promise<void> {
+  if (isMockMode()) { await delay(); return }
+  await client.post(`/payment/orders/${id}/refund-request`)
+}
+
+export async function verifyOrder(data: { out_trade_no: string }): Promise<{ status: string; paid: boolean }> {
+  if (isMockMode()) { await delay(); return { status: 'paid', paid: true } }
+  return unwrap<{ status: string; paid: boolean }>(await client.post('/payment/orders/verify', data))
+}
+
+export async function getRefundEligibleProviders(): Promise<string[]> {
+  if (isMockMode()) { await delay(); return ['stripe'] }
+  const body = unwrap<string[] | { items?: string[] }>(await client.get('/payment/orders/refund-eligible-providers'))
+  return Array.isArray(body) ? body : body?.items ?? []
+}

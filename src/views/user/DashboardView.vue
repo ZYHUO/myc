@@ -33,13 +33,54 @@ const stats = [
 const barHeights = ref<number[]>(Array(12).fill(10))
 const recentUsage = ref<Array<{ time: string; model: string; tokens: string; cost: string; status: 'online' | 'offline' }>>([])
 
+// sub2api usage row shape (snake_case, integers in micro-USD for *_cost fields).
 interface RawUsageLog {
+  id?: number
   created_at: string
   model?: string
-  tokens_prompt?: number
-  tokens_completion?: number
-  cost_usd?: number
+  input_tokens?: number
+  output_tokens?: number
+  cache_creation_tokens?: number
+  cache_read_tokens?: number
+  total_cost?: number
   status_code?: number
+}
+
+interface DashboardStats {
+  total_api_keys?: number
+  total_requests?: number
+  total_tokens?: number
+}
+
+interface TrendPoint {
+  date: string
+  requests: number
+  total_tokens?: number
+  cost?: number
+}
+
+function relativeTime(iso: string): string {
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return iso
+  const diff = Math.max(0, Date.now() - t)
+  const m = Math.floor(diff / 60_000)
+  if (m < 1) return 'Just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  return `${d}d ago`
+}
+
+function mapRecentUsage(item: RawUsageLog) {
+  const tokens = (item.input_tokens || 0) + (item.output_tokens || 0)
+  return {
+    time: relativeTime(item.created_at),
+    model: item.model || 'unknown',
+    tokens: tokens.toLocaleString(),
+    cost: `$${(item.total_cost || 0).toFixed(4)}`,
+    status: (item.status_code === undefined || item.status_code === 200) ? ('online' as const) : ('offline' as const),
+  }
 }
 
 onMounted(async () => {
@@ -54,26 +95,41 @@ onMounted(async () => {
       { time: '18 min ago', model: 'deepseek-v3', tokens: '890', cost: '$0.009', status: 'offline' },
       { time: '25 min ago', model: 'gpt-4o-mini', tokens: '3,560', cost: '$0.011', status: 'online' },
     ]
-  } else {
-    try {
-      const body = unwrap<{ items?: RawUsageLog[]; total?: number } | RawUsageLog[]>(
-        await client.get('/admin/usage', { params: { page: 1, page_size: 5 } }),
-      )
-      const items = Array.isArray(body) ? body : body?.items ?? []
-      const total = Array.isArray(body) ? items.length : body?.total ?? items.length
-      totalRequests.value = total
-      recentUsage.value = items.map((item) => ({
-        time: new Date(item.created_at).toLocaleTimeString(),
-        model: item.model || 'unknown',
-        tokens: ((item.tokens_prompt || 0) + (item.tokens_completion || 0)).toLocaleString(),
-        cost: `$${(item.cost_usd || 0).toFixed(4)}`,
-        status: item.status_code === 200 ? ('online' as const) : ('offline' as const),
-      }))
-    } catch (e) {
-      console.error('Failed to fetch usage:', e)
-    }
+    loading.value = false
+    return
   }
-  loading.value = false
+  try {
+    // Aggregate stats already include total_api_keys, so no need for a separate /keys count call.
+    const [stats, trend, usage] = await Promise.all([
+      client.get('/usage/dashboard/stats').then((r) => unwrap<DashboardStats>(r)),
+      client.get('/usage/dashboard/trend', { params: { days: 12 } }).then((r) =>
+        unwrap<{ trend?: TrendPoint[] } | TrendPoint[]>(r),
+      ),
+      client.get('/usage', { params: { page: 1, page_size: 5 } }).then((r) =>
+        unwrap<{ items?: RawUsageLog[] } | RawUsageLog[]>(r),
+      ),
+    ])
+
+    totalKeys.value = stats.total_api_keys ?? 0
+    totalRequests.value = stats.total_requests ?? 0
+    totalTokensThousands.value = Math.round((stats.total_tokens ?? 0) / 1000)
+
+    const points = Array.isArray(trend) ? trend : trend?.trend ?? []
+    if (points.length > 0) {
+      const max = Math.max(...points.map((p) => p.requests || 0), 1)
+      const heights = points.map((p) => Math.max(8, Math.round(((p.requests || 0) / max) * 100)))
+      // Pad to at least 12 buckets on the left so the chart layout is stable.
+      const padded = heights.length >= 12 ? heights : [...Array(12 - heights.length).fill(8), ...heights]
+      barHeights.value = padded.slice(-12)
+    }
+
+    const items = Array.isArray(usage) ? usage : usage?.items ?? []
+    recentUsage.value = items.map(mapRecentUsage)
+  } catch (e) {
+    console.error('Dashboard load failed:', e)
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 

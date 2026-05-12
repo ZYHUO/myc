@@ -5,7 +5,7 @@ import { useToast, useConfirm } from '@/composables'
 import { getKeys, createKey, deleteKey } from '@/api/keys'
 import type { ApiKey } from '@/api/keys'
 import client from '@/api/client'
-import { isMockMode } from '@/api/_util'
+import { unwrap } from '@/api/_util'
 
 const keys = ref<ApiKey[]>([])
 const loading = ref(true)
@@ -32,14 +32,18 @@ onMounted(async () => {
 async function loadGroups() {
   if (availableGroups.value.length > 0) return
   try {
-    const res = await client.get('/admin/groups')
-    const items = res.data.data?.items || []
-    availableGroups.value = items.map((g: any) => ({ id: g.id, name: g.name }))
+    // sub2api: /groups/available is user-scoped (no admin auth required) and
+    // returns a bare list with each group's id + name + platform + status.
+    const body = unwrap<Array<{ id: number; name: string }> | { items?: Array<{ id: number; name: string }> }>(
+      await client.get('/groups/available'),
+    )
+    const items = Array.isArray(body) ? body : body?.items ?? []
+    availableGroups.value = items.map((g) => ({ id: g.id, name: g.name }))
     if (availableGroups.value.length > 0 && newKeyGroupId.value === 0) {
       newKeyGroupId.value = availableGroups.value[0].id
     }
   } catch {
-    // Fallback groups
+    // Fallback groups if upstream is unreachable
     availableGroups.value = [
       { id: 2, name: 'idk' },
       { id: 3, name: 'pro20x 1' },

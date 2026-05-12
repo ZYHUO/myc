@@ -2,11 +2,15 @@
 import { ref, onMounted } from 'vue'
 import { UiCard, UiButton, UiCopyButton, UiTable } from '@/components/ui'
 import { useToast, useConfirm } from '@/composables'
-import { getAffiliateStats, getAffiliateActivity, getReferralLink, type AffiliateStats, type AffiliateActivity } from '@/api/affiliate'
+import { useAuthStore } from '@/stores/auth'
+import { getAffiliateData, transferAffiliateBalance, type AffiliateData } from '@/api/affiliate'
 
-const stats = ref<AffiliateStats>({ totalReferrals: 0, availableRebate: 0, totalEarned: 0 })
-const activity = ref<AffiliateActivity[]>([])
-const referralLink = ref('')
+const auth = useAuthStore()
+const data = ref<AffiliateData>({
+  stats: { totalReferrals: 0, availableRebate: 0, totalEarned: 0, frozenRebate: 0, rebateRatePercent: 0 },
+  activity: [],
+  referralLink: '',
+})
 const loading = ref(true)
 const transferring = ref(false)
 const toast = useToast()
@@ -14,14 +18,7 @@ const { confirm } = useConfirm()
 
 onMounted(async () => {
   try {
-    const [s, a, l] = await Promise.all([
-      getAffiliateStats(),
-      getAffiliateActivity(),
-      getReferralLink(),
-    ])
-    stats.value = s
-    activity.value = a
-    referralLink.value = l
+    data.value = await getAffiliateData()
   } catch {
     toast.error('Failed to load affiliate data')
   } finally {
@@ -30,25 +27,31 @@ onMounted(async () => {
 })
 
 async function handleTransfer() {
-  if (stats.value.availableRebate <= 0) {
+  const amount = data.value.stats.availableRebate
+  if (amount <= 0) {
     toast.warning('No rebate available to transfer')
     return
   }
   const confirmed = await confirm({
     title: 'Transfer to Balance',
-    message: `Transfer ¥${stats.value.availableRebate.toFixed(2)} from affiliate rebate to your account balance?`,
+    message: `Transfer $${amount.toFixed(2)} from affiliate rebate to your account balance?`,
   })
   if (!confirmed) return
   transferring.value = true
-  setTimeout(() => {
-    const amount = stats.value.availableRebate
-    stats.value.availableRebate = 0
+  try {
+    await transferAffiliateBalance(amount)
+    data.value.stats.availableRebate = 0
+    await auth.fetchUser()
+    toast.success(`$${amount.toFixed(2)} transferred to balance`)
+  } catch {
+    toast.error('Transfer failed')
+  } finally {
     transferring.value = false
-    toast.success(`¥${amount.toFixed(2)} transferred to balance`)
-  }, 1000)
+  }
 }
 
 function formatDate(iso: string): string {
+  if (!iso) return '—'
   return new Date(iso).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -57,9 +60,9 @@ function formatDate(iso: string): string {
 }
 
 const statCards = [
-  { key: 'totalReferrals' as const, label: 'Total Referrals' },
-  { key: 'availableRebate' as const, label: 'Available Rebate' },
-  { key: 'totalEarned' as const, label: 'Total Earned' },
+  { label: 'Total Referrals', get value() { return String(data.value.stats.totalReferrals) } },
+  { label: 'Available Rebate', get value() { return `$${data.value.stats.availableRebate.toFixed(2)}` } },
+  { label: 'Total Earned', get value() { return `$${data.value.stats.totalEarned.toFixed(2)}` } },
 ]
 </script>
 
@@ -71,6 +74,9 @@ const statCards = [
       <h1 class="text-5xl font-display font-normal tracking-tight mt-3">Referral program</h1>
       <p class="text-base text-muted-fg leading-relaxed mt-3 max-w-xl">
         Invite friends and earn rebates on their usage.
+        <template v-if="data.stats.rebateRatePercent > 0">
+          Your current rate is <span class="text-fg font-medium">{{ data.stats.rebateRatePercent }}%</span>.
+        </template>
       </p>
     </div>
 
@@ -84,10 +90,8 @@ const statCards = [
     <template v-else>
       <!-- Stat Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <UiCard v-for="card in statCards" :key="card.key">
-          <p class="text-4xl font-light tracking-tight tabular-nums font-mono">
-            {{ card.key === 'totalReferrals' ? stats[card.key] : `¥${stats[card.key].toFixed(1)}` }}
-          </p>
+        <UiCard v-for="card in statCards" :key="card.label">
+          <p class="text-4xl font-light tracking-tight tabular-nums font-mono">{{ card.value }}</p>
           <p class="text-[11px] uppercase tracking-[0.18em] text-muted-fg mt-2">{{ card.label }}</p>
         </UiCard>
       </div>
@@ -97,11 +101,12 @@ const statCards = [
         <p class="text-sm font-medium mb-3">Your referral link</p>
         <div class="flex gap-2">
           <input
-            :value="referralLink"
+            :value="data.referralLink"
             readonly
+            aria-label="Referral link"
             class="flex-1 h-10 rounded-md border border-input bg-card px-3 text-sm text-fg font-mono outline-none"
           />
-          <UiCopyButton :text="referralLink" />
+          <UiCopyButton :text="data.referralLink" />
         </div>
       </UiCard>
 
@@ -109,7 +114,7 @@ const statCards = [
       <div class="space-y-5">
         <p class="text-3xl font-display font-normal tracking-tight">Recent activity</p>
 
-        <UiTable>
+        <UiTable v-if="data.activity.length > 0">
           <thead>
             <tr class="border-b border-border">
               <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.15em] text-muted-fg font-medium">User</th>
@@ -118,18 +123,19 @@ const statCards = [
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, idx) in activity" :key="item.user" class="border-b border-border last:border-0 stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
+            <tr v-for="(item, idx) in data.activity" :key="`${item.user}-${idx}`" class="border-b border-border last:border-0 stagger-item" :style="{ animationDelay: `${idx * 60}ms` }">
               <td class="px-4 py-3 text-sm">{{ item.user }}</td>
               <td class="px-4 py-3 text-sm text-muted-fg">{{ formatDate(item.joinedAt) }}</td>
-              <td class="px-4 py-3 font-mono text-sm tabular-nums">¥{{ item.rebate.toFixed(2) }}</td>
+              <td class="px-4 py-3 font-mono text-sm tabular-nums">${{ item.rebate.toFixed(2) }}</td>
             </tr>
           </tbody>
         </UiTable>
+        <p v-else class="text-sm text-muted-fg">No referrals yet. Share your link to start earning.</p>
       </div>
 
       <!-- Transfer Button -->
       <div>
-        <UiButton variant="secondary" :disabled="transferring" @click="handleTransfer">
+        <UiButton variant="secondary" :disabled="transferring || data.stats.availableRebate <= 0" @click="handleTransfer">
           {{ transferring ? 'Transferring…' : 'Transfer to Balance' }}
         </UiButton>
       </div>
