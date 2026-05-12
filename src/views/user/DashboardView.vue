@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import client from '@/api/client'
+import { isMockMode } from '@/api/_util'
 import { UiCard, UiButton, UiTable, UiStatusDot, UiSkeleton } from '@/components/ui'
 import { useCountUp } from '@/composables'
 
@@ -9,30 +11,51 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(true)
 
-const animatedKeys = useCountUp(7)
-const animatedRequests = useCountUp(12847)
-const animatedTokens = useCountUp(3200)
-const animatedBalance = useCountUp(Math.round((auth.user?.balance ?? 128.50) * 100))
+const animatedKeys = useCountUp(0)
+const animatedRequests = useCountUp(0)
+const animatedTokens = useCountUp(0)
+const animatedBalance = useCountUp(Math.round((auth.user?.balance ?? 0) * 100))
 
 const stats = [
   { get value() { return String(animatedKeys.value) }, label: 'Total Keys' },
   { get value() { return animatedRequests.value.toLocaleString() }, label: 'Total Requests' },
   { get value() { return `${(animatedTokens.value / 1000).toFixed(1)}M` }, label: 'Tokens Used' },
-  { get value() { return `¥${(animatedBalance.value / 100).toFixed(2)}` }, label: 'Balance' },
+  { get value() { return `$${(animatedBalance.value / 100).toFixed(2)}` }, label: 'Balance' },
 ]
 
-const barHeights = [35, 52, 68, 45, 80, 62, 90, 73, 55, 85, 48, 70]
+const barHeights = ref<number[]>(Array(12).fill(10))
+const recentUsage = ref<Array<{ time: string; model: string; tokens: string; cost: string; status: 'online' | 'offline' }>>([])
 
-const recentUsage = [
-  { time: '2 min ago', model: 'claude-sonnet-4', tokens: '2,847', cost: '¥0.085', status: 'online' as const },
-  { time: '5 min ago', model: 'gpt-4o', tokens: '1,230', cost: '¥0.062', status: 'online' as const },
-  { time: '12 min ago', model: 'gemini-2.5-pro', tokens: '4,102', cost: '¥0.115', status: 'online' as const },
-  { time: '18 min ago', model: 'deepseek-v3', tokens: '890', cost: '¥0.009', status: 'offline' as const },
-  { time: '25 min ago', model: 'gpt-4o-mini', tokens: '3,560', cost: '¥0.011', status: 'online' as const },
-]
+onMounted(async () => {
+  // Fetch real usage data
+  if (!isMockMode()) {
+    try {
+      const res = await client.get('/admin/usage', { params: { page: 1, page_size: 5 } })
+      const items = res.data.data?.items || []
+      recentUsage.value = items.map((item: any) => ({
+        time: new Date(item.created_at).toLocaleTimeString(),
+        model: item.model || 'unknown',
+        tokens: ((item.tokens_prompt || 0) + (item.tokens_completion || 0)).toLocaleString(),
+        cost: `$${(item.cost_usd || 0).toFixed(4)}`,
+        status: item.status_code === 200 ? 'online' as const : 'offline' as const,
+      }))
 
-onMounted(() => {
-  setTimeout(() => { loading.value = false }, 600)
+      // Update balance from user profile
+      animatedBalance.value = Math.round((auth.user?.balance ?? 0) * 100)
+      animatedRequests.value = items.length
+    } catch (e) {
+      console.error('Failed to fetch usage:', e)
+    }
+  } else {
+    recentUsage.value = [
+      { time: '2 min ago', model: 'claude-sonnet-4', tokens: '2,847', cost: '$0.085', status: 'online' },
+      { time: '5 min ago', model: 'gpt-4o', tokens: '1,230', cost: '$0.062', status: 'online' },
+      { time: '12 min ago', model: 'gemini-2.5-pro', tokens: '4,102', cost: '$0.115', status: 'online' },
+      { time: '18 min ago', model: 'deepseek-v3', tokens: '890', cost: '$0.009', status: 'offline' },
+      { time: '25 min ago', model: 'gpt-4o-mini', tokens: '3,560', cost: '$0.011', status: 'online' },
+    ]
+  }
+  loading.value = false
 })
 </script>
 

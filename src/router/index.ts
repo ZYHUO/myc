@@ -97,9 +97,16 @@ router.beforeEach(async (to) => {
   if (to.meta.public) return true
 
   const auth = useAuthStore()
+
+  // If already authenticated (e.g. just logged in), allow immediately
+  console.log('[Guard]', to.path, 'initialized:', auth.initialized, 'authenticated:', auth.isAuthenticated)
+  if (auth.isAuthenticated) return true
+
+  // First visit: fetch user from stored token
   if (!auth.initialized) {
     await auth.fetchUser()
   }
+
   if (!auth.isAuthenticated) {
     return {
       name: 'login',

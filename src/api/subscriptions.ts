@@ -3,62 +3,73 @@ import { delay, isMockMode } from './_util'
 
 export interface Subscription {
   id: string
-  name: string
-  usagePercent: number
-  dailyUsage: number
-  expiresAt: string
+  group_id: number
+  group_name: string
+  subscription_type: string
+  platform: string
   status: 'active' | 'expired' | 'suspended'
+  starts_at: string
+  expires_at: string
+  // Usage
+  daily_usage_usd: number
+  weekly_usage_usd: number
+  monthly_usage_usd: number
+  // Limits
+  daily_limit_usd: number
+  weekly_limit_usd: number
+  monthly_limit_usd: number
+  // Features
+  allow_image_generation: boolean
+  rpm_limit: number
 }
 
 const MOCK_SUBSCRIPTIONS: Subscription[] = [
   {
-    id: 'sub_001',
-    name: '旗舰版 · 月度套餐',
-    usagePercent: 42.5,
-    dailyUsage: 3420,
-    expiresAt: '2026-06-15T00:00:00Z',
-    status: 'active',
+    id: '1', group_id: 7, group_name: 'pro20x', subscription_type: 'subscription',
+    platform: 'openai', status: 'active',
+    starts_at: '2026-05-07T00:00:00Z', expires_at: '2026-06-06T00:00:00Z',
+    daily_usage_usd: 7.78, weekly_usage_usd: 61.95, monthly_usage_usd: 61.95,
+    daily_limit_usd: 0, weekly_limit_usd: 420, monthly_limit_usd: 1680,
+    allow_image_generation: true, rpm_limit: 0,
   },
   {
-    id: 'sub_002',
-    name: 'Claude 专项 · 季度套餐',
-    usagePercent: 78.3,
-    dailyUsage: 1280,
-    expiresAt: '2026-08-01T00:00:00Z',
-    status: 'active',
-  },
-  {
-    id: 'sub_003',
-    name: '基础版 · 月度套餐',
-    usagePercent: 95.1,
-    dailyUsage: 890,
-    expiresAt: '2026-05-20T00:00:00Z',
-    status: 'active',
-  },
-  {
-    id: 'sub_004',
-    name: '试用套餐',
-    usagePercent: 100,
-    dailyUsage: 0,
-    expiresAt: '2026-04-01T00:00:00Z',
-    status: 'expired',
+    id: '2', group_id: 6, group_name: 'mimo', subscription_type: 'subscription',
+    platform: 'anthropic', status: 'active',
+    starts_at: '2026-04-29T00:00:00Z', expires_at: '2026-05-29T00:00:00Z',
+    daily_usage_usd: 0, weekly_usage_usd: 0.19, monthly_usage_usd: 0.19,
+    daily_limit_usd: 200, weekly_limit_usd: 1400, monthly_limit_usd: 2000,
+    allow_image_generation: false, rpm_limit: 0,
   },
 ]
+
+function mapSub(raw: any): Subscription {
+  const g = raw.group || {}
+  return {
+    id: String(raw.id),
+    group_id: raw.group_id || g.id || 0,
+    group_name: g.name || 'Unknown',
+    subscription_type: g.subscription_type || 'subscription',
+    platform: g.platform || 'openai',
+    status: raw.status || 'active',
+    starts_at: raw.starts_at || '',
+    expires_at: raw.expires_at || '',
+    daily_usage_usd: raw.daily_usage_usd || 0,
+    weekly_usage_usd: raw.weekly_usage_usd || 0,
+    monthly_usage_usd: raw.monthly_usage_usd || 0,
+    daily_limit_usd: g.daily_limit_usd || 0,
+    weekly_limit_usd: g.weekly_limit_usd || 0,
+    monthly_limit_usd: g.monthly_limit_usd || 0,
+    allow_image_generation: g.allow_image_generation || false,
+    rpm_limit: g.rpm_limit || 0,
+  }
+}
 
 export async function getSubscriptions(): Promise<Subscription[]> {
   if (isMockMode()) {
     await delay()
-    return MOCK_SUBSCRIPTIONS.map((s) => ({ ...s }))
+    return MOCK_SUBSCRIPTIONS.map(s => ({ ...s }))
   }
-  const res = await client.get<Subscription[]>('/subscriptions')
-  return res.data
-}
-
-export async function getActiveSubscriptions(): Promise<Subscription[]> {
-  if (isMockMode()) {
-    await delay()
-    return MOCK_SUBSCRIPTIONS.filter((s) => s.status === 'active').map((s) => ({ ...s }))
-  }
-  const res = await client.get<Subscription[]>('/subscriptions/active')
-  return res.data
+  const res = await client.get('/subscriptions')
+  const items = res.data.data || res.data
+  return Array.isArray(items) ? items.map(mapSub) : []
 }
