@@ -387,7 +387,7 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
             <p v-if="plan.description" class="mt-3 text-sm text-muted-fg">{{ plan.description }}</p>
             <ul v-if="plan.features" class="mt-6 space-y-3">
               <li
-                v-for="feat in plan.features.split(/\n|;|,/).map((f) => f.trim()).filter(Boolean)"
+                v-for="feat in plan.features.split('\n').map((f) => f.trim()).filter(Boolean)"
                 :key="feat"
                 class="flex items-start gap-2 text-sm text-muted-fg"
               >

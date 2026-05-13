@@ -603,6 +603,13 @@ export default {
         },
       },
       note: 'プラン・リージョン・上限はデプロイ環境ごとに異なる場合があります。',
+      dynamic: {
+        popular: 'おすすめ',
+        ctaAnon: 'このプランを選ぶ',
+        ctaAuthed: '今すぐ加入',
+        unitDays: '/ {n} 日',
+        unitMonths: '/ {n} か月',
+      },
     },
 
     faq: {
@@ -715,6 +722,15 @@ export default {
       vPasswordMismatch: 'パスワードが一致しません',
       vCodeRequired: 'メールに届いた認証コードを入力してください',
       vAgreementRequired: '続行するには規約への同意が必要です',
+    },
+    aside: {
+      eyebrow: 'ワンキー・全モデル',
+      tagline: 'Claude、GPT、Gemini など主要モデルを束ねる統一ゲートウェイ。',
+      bullets: [
+        'OpenAI / Anthropic 互換のエンドポイント — 既存 SDK のコードを変えずに利用可能。',
+        'キー単位の上限・RPM 制限、リクエストごとの正直な利用量レポート。',
+        'サブスクで月額固定、または残高チャージで従量課金。上流の切替もコード変更不要。',
+      ],
     },
     forgot: {
       eyebrow: 'パスワード再設定',

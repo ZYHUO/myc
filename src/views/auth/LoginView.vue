@@ -9,6 +9,7 @@ import { UiInput, UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
 import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
 import UiTurnstile from '@/components/ui/UiTurnstile.vue'
+import AuthAside from '@/components/auth/AuthAside.vue'
 import { isMockMode } from '@/api/_util'
 
 const router = useRouter()
@@ -94,23 +95,24 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-bg">
-    <!-- Brand strip -->
-    <header class="px-6 sm:px-8 py-5 flex items-center justify-between">
-      <RouterLink to="/" class="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
-        <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
-          A
+  <div class="min-h-screen grid lg:grid-cols-[1fr_minmax(0,520px)] xl:grid-cols-[1fr_minmax(0,600px)] bg-bg">
+    <!-- ── Left: form column ────────────────────────────────────────── -->
+    <div class="flex flex-col min-h-screen">
+      <header class="px-6 sm:px-10 py-5 flex items-center justify-between">
+        <RouterLink to="/" class="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
+          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
+            A
+          </div>
+          <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
+        </RouterLink>
+        <div class="flex items-center gap-1">
+          <UiLanguageSwitcher />
+          <UiThemeSwitcher />
         </div>
-        <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
-      </RouterLink>
-      <div class="flex items-center gap-1">
-        <UiLanguageSwitcher />
-        <UiThemeSwitcher />
-      </div>
-    </header>
+      </header>
 
-    <main class="flex flex-1 items-center justify-center px-6 py-8">
-      <div class="w-full max-w-[420px] animate-fade-in">
+      <main class="flex flex-1 items-center justify-center px-6 sm:px-10 py-8">
+        <div class="w-full max-w-[420px] animate-fade-in">
         <div>
           <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('auth.login.eyebrow') }}</p>
           <h1 class="mt-3 text-4xl font-display font-normal tracking-tight">{{ t('auth.login.title') }}</h1>
@@ -205,9 +207,13 @@ async function handleSubmit() {
           <span class="inline-block rounded-sm bg-accent px-1.5 py-0.5 font-mono text-[10px] text-accent-fg mr-1">MOCK</span>
           {{ t('auth.login.mockHint') }}
         </p>
-      </div>
-    </main>
+        </div>
+      </main>
 
-    <footer class="px-6 sm:px-8 py-6 text-xs text-muted-fg">© Amodel</footer>
+      <footer class="px-6 sm:px-10 py-6 text-xs text-muted-fg">© Amodel</footer>
+    </div>
+
+    <!-- ── Right: marketing aside (lg+ only) ────────────────────────── -->
+    <AuthAside />
   </div>
 </template>

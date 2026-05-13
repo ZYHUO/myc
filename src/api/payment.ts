@@ -244,10 +244,28 @@ const MOCK_CONFIG: PaymentConfig = {
   help_image_url: '',
 }
 
+// sub2api stores `features` as a newline-separated string and splits on
+// '\n' (see handler/payment_handler.go:parseFeatures). The mocks mirror
+// that contract so the SPA's display logic stays single-path.
 const MOCK_PLANS: PaymentPlan[] = [
-  { id: 1, group_id: 5, group_platform: 'openai', name: 'Basic', description: 'Casual usage', price: 29, validity_days: 30, validity_unit: 'days', features: '5,000 requests/day', product_name: 'Basic Plan', for_sale: true, sort_order: 1 },
-  { id: 2, group_id: 7, group_platform: 'openai', name: 'Pro', description: 'Power user', price: 79, original_price: 99, validity_days: 30, validity_unit: 'days', features: '50,000 requests/day', product_name: 'Pro Plan', for_sale: true, sort_order: 2 },
-  { id: 3, group_id: 6, group_platform: 'anthropic', name: 'Enterprise', description: 'Unlimited', price: 199, validity_days: 30, validity_unit: 'days', features: 'Unlimited', product_name: 'Enterprise Plan', for_sale: true, sort_order: 3 },
+  {
+    id: 1, group_id: 5, group_platform: 'openai', name: 'Basic', description: 'Casual usage',
+    price: 29, validity_days: 30, validity_unit: 'days',
+    features: '5,000 requests/day\nGPT-4o & GPT-4o-mini\nDaily and weekly caps',
+    product_name: 'Basic Plan', for_sale: true, sort_order: 1,
+  },
+  {
+    id: 2, group_id: 7, group_platform: 'openai', name: 'Pro', description: 'Power user',
+    price: 79, original_price: 99, validity_days: 30, validity_unit: 'days',
+    features: '50,000 requests/day\nAll OpenAI models\nPriority routing\nPooled capacity',
+    product_name: 'Pro Plan', for_sale: true, sort_order: 2,
+  },
+  {
+    id: 3, group_id: 6, group_platform: 'anthropic', name: 'Enterprise', description: 'Unlimited',
+    price: 199, validity_days: 30, validity_unit: 'days',
+    features: 'Unlimited requests\nClaude family\nDedicated upstreams\nWeekly soft caps',
+    product_name: 'Enterprise Plan', for_sale: true, sort_order: 3,
+  },
 ]
 
 const MOCK_CHANNELS: PaymentChannel[] = [

@@ -603,6 +603,13 @@ export default {
         },
       },
       note: '不同部署的套餐、地区与限额可能不同。如果某项功能被关闭，请联系管理员。',
+      dynamic: {
+        popular: '推荐',
+        ctaAnon: '选择此方案',
+        ctaAuthed: '立即订阅',
+        unitDays: '/ {n} 天',
+        unitMonths: '/ {n} 个月',
+      },
     },
 
     faq: {
@@ -715,6 +722,15 @@ export default {
       vPasswordMismatch: '两次密码不一致',
       vCodeRequired: '请填写邮箱中的验证码',
       vAgreementRequired: '请先同意条款',
+    },
+    aside: {
+      eyebrow: '一把密钥 · 全部模型',
+      tagline: 'Claude、GPT、Gemini 等大模型的统一接入网关。',
+      bullets: [
+        '兼容 OpenAI 和 Anthropic 协议——已有 SDK 代码直接换 endpoint 即可用。',
+        '每把 Key 独立的额度上限、RPM 限制，按请求维度的真实用量分析。',
+        '订阅按家族包月，或充值余额按量使用，切换上游不用动代码。',
+      ],
     },
     forgot: {
       eyebrow: '密码找回',

@@ -613,6 +613,13 @@ export default {
         },
       },
       note: 'Plans, regions and limits may vary by deployment. Check your administrator if a feature you need is gated.',
+      dynamic: {
+        popular: 'POPULAR',
+        ctaAnon: 'Get this plan',
+        ctaAuthed: 'Subscribe now',
+        unitDays: '/ {n} days',
+        unitMonths: '/ {n} mo',
+      },
     },
 
     faq: {
@@ -732,6 +739,15 @@ export default {
       vPasswordMismatch: 'Passwords do not match',
       vCodeRequired: 'Enter the verification code from your email',
       vAgreementRequired: 'You must accept the terms to continue',
+    },
+    aside: {
+      eyebrow: 'ONE KEY · EVERY MODEL',
+      tagline: 'A unified gateway for Claude, GPT, Gemini, and the rest.',
+      bullets: [
+        'Drop-in OpenAI- and Anthropic-compatible endpoints — keep your existing SDK code.',
+        'Per-key spend caps, RPM limits, and honest analytics on every request.',
+        'Subscribe to a model family or top up balance — switch upstreams without touching code.',
+      ],
     },
     forgot: {
       eyebrow: 'RECOVERY',

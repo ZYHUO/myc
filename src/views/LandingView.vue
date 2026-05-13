@@ -8,6 +8,7 @@ import { UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
 import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
 import { useCountUp } from '@/composables'
+import { getPlans, type PaymentPlan } from '@/api/payment'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -83,6 +84,7 @@ function setupHeroPause() {
 
 onMounted(() => {
   settingsStore.load().catch(() => {})
+  loadRealPlans()
   // Run after the DOM has settled.
   requestAnimationFrame(() => {
     setupReveals()
@@ -113,6 +115,59 @@ const faqItems = computed(() => {
 
 const paygFeatures = computed(() => tm('landing.pricing.plans.payg.features') as string[])
 const subFeatures = computed(() => tm('landing.pricing.plans.sub.features') as string[])
+
+// ─── Real plan cards (best-effort) ──────────────────────────────────────────
+//
+// `/payment/plans` is gated by the user-auth middleware in sub2api, so an
+// anonymous landing-page visit will 401. We still try, because (a) an
+// already-signed-in visitor browsing the landing should see real prices,
+// and (b) some forks expose this publicly. On any failure (401, 404,
+// network, settings missing) we fall back to the static i18n PAYG/Sub
+// cards already in the template — that path is still valuable for
+// pre-launch deployments where no plans exist yet.
+const realPlans = ref<PaymentPlan[]>([])
+async function loadRealPlans() {
+  try {
+    const list = await getPlans()
+    realPlans.value = list
+      .filter((p) => p.for_sale)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.price - b.price)
+  } catch {
+    realPlans.value = []
+  }
+}
+
+const hasRealPlans = computed(() => realPlans.value.length > 0)
+
+/** Pick the highlight card: prefer one with a discount, else the second
+ *  cheapest (typical "good value" middle tier), else just the first. */
+const highlightedPlanId = computed(() => {
+  if (realPlans.value.length === 0) return null
+  const discounted = realPlans.value.find((p) => p.original_price && p.original_price > p.price)
+  if (discounted) return discounted.id
+  if (realPlans.value.length >= 2) return realPlans.value[1].id
+  return realPlans.value[0].id
+})
+
+function planFeatures(p: PaymentPlan): string[] {
+  if (!p.features) return []
+  // Match sub2api's split: newline only. Splitting on commas was wrong —
+  // it shredded entries like "5,000 requests/day" into two bullet items.
+  return p.features.split('\n').map((f) => f.trim()).filter(Boolean)
+}
+
+function planValidity(p: PaymentPlan): string {
+  if (!p.validity_days) return ''
+  if (p.validity_days % 30 === 0 && p.validity_days >= 30) {
+    return t('landing.pricing.dynamic.unitMonths', { n: p.validity_days / 30 })
+  }
+  return t('landing.pricing.dynamic.unitDays', { n: p.validity_days })
+}
+
+function planCtaTarget(): string {
+  if (isAuthed.value) return '/purchase'
+  return showRegister.value ? '/register' : '/login'
+}
 
 function scrollTo(id: string) {
   closeDrawer()
@@ -376,7 +431,85 @@ function go(path: string) {
           <p class="mt-4 text-muted-fg leading-relaxed">{{ t('landing.pricing.lead') }}</p>
         </div>
 
-        <div class="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Real plans when /payment/plans returned something. Grid columns
+             follow the count: 1 → single centered card, 2 → side-by-side,
+             3+ → 3-column. Past 3 we wrap (rare; admin can tune). -->
+        <div
+          v-if="hasRealPlans"
+          class="mt-12 grid gap-6"
+          :class="{
+            'md:grid-cols-1 max-w-md mx-auto': realPlans.length === 1,
+            'md:grid-cols-2': realPlans.length === 2,
+            'md:grid-cols-2 lg:grid-cols-3': realPlans.length >= 3,
+          }"
+        >
+          <div
+            v-for="(plan, idx) in realPlans"
+            :key="plan.id"
+            class="animate-fade-in stagger-item rounded-2xl bg-card p-7 card-hover relative"
+            :class="
+              plan.id === highlightedPlanId
+                ? 'border-2 border-primary/40'
+                : 'border border-border'
+            "
+            :style="{ animationDelay: `${idx * 80}ms` }"
+          >
+            <span
+              v-if="plan.id === highlightedPlanId"
+              class="absolute -top-3 right-6 rounded-full bg-primary text-primary-fg text-[10px] font-medium uppercase tracking-wider px-2.5 py-1"
+            >
+              {{ t('landing.pricing.dynamic.popular') }}
+            </span>
+            <p
+              class="text-sm font-medium uppercase tracking-wider"
+              :class="plan.id === highlightedPlanId ? 'text-primary' : 'text-muted-fg'"
+            >
+              {{ plan.name }}
+            </p>
+            <p v-if="plan.description" class="mt-1 text-xs text-muted-fg">{{ plan.description }}</p>
+            <p class="mt-3 font-display text-5xl tabular-nums tracking-tight">
+              ${{ plan.price.toFixed(plan.price % 1 === 0 ? 0 : 2) }}<span
+                v-if="planValidity(plan)"
+                class="text-base font-normal text-muted-fg ml-1"
+              >{{ planValidity(plan) }}</span>
+            </p>
+            <p
+              v-if="plan.original_price && plan.original_price > plan.price"
+              class="mt-1 text-xs text-muted-fg line-through tabular-nums"
+            >${{ plan.original_price.toFixed(plan.original_price % 1 === 0 ? 0 : 2) }}</p>
+            <ul v-if="planFeatures(plan).length > 0" class="mt-7 space-y-3">
+              <li v-for="feat in planFeatures(plan)" :key="feat" class="flex items-start gap-2 text-sm">
+                <svg
+                  class="mt-0.5 h-4 w-4 shrink-0"
+                  :class="plan.id === highlightedPlanId ? 'text-primary' : 'text-green'"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                <span class="text-muted-fg">{{ feat }}</span>
+              </li>
+            </ul>
+            <div class="mt-7">
+              <UiButton
+                :variant="plan.id === highlightedPlanId ? 'primary' : 'secondary'"
+                size="md"
+                class="w-full"
+                @click="router.push(planCtaTarget())"
+              >
+                {{ isAuthed ? t('landing.pricing.dynamic.ctaAuthed') : t('landing.pricing.dynamic.ctaAnon') }}
+              </UiButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- Static fallback when /payment/plans is 401 / 404 / empty.
+             Generic "PAYG vs Subscription" framing — preserves the
+             marketing page for pre-launch deployments. -->
+        <div v-else class="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="reveal reveal-delay-1 rounded-2xl border border-border bg-card p-7 card-hover">
             <p class="text-sm font-medium text-muted-fg uppercase tracking-wider">{{ t('landing.pricing.plans.payg.name') }}</p>
             <p class="mt-3 font-display text-5xl tabular-nums tracking-tight">
