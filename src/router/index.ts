@@ -110,7 +110,60 @@ const router = createRouter({
   },
 })
 
+// ─── Top progress bar ─────────────────────────────────────────────────────
+//
+// Each route component is `() => import(...)` — a separate JS chunk that
+// gets fetched on first navigation to that route. On a slow link the
+// fetch can take 200-800 ms before the new view paints, during which the
+// user sees the previous view unchanged and assumes their click did
+// nothing. Show a thin bar pinned to the top so they know work is
+// happening. The bar lives in style.css as `.route-progress`.
+
+let progressEl: HTMLElement | null = null
+let progressTimer: ReturnType<typeof setTimeout> | null = null
+
+function ensureProgressEl(): HTMLElement | null {
+  if (typeof document === 'undefined') return null
+  if (progressEl) return progressEl
+  progressEl = document.createElement('div')
+  progressEl.className = 'route-progress'
+  progressEl.style.width = '100%'
+  progressEl.style.transform = 'scaleX(0)'
+  progressEl.style.opacity = '0'
+  document.body.appendChild(progressEl)
+  return progressEl
+}
+
+function startProgress() {
+  const el = ensureProgressEl()
+  if (!el) return
+  // Cancel any pending hide.
+  if (progressTimer !== null) { clearTimeout(progressTimer); progressTimer = null }
+  // 0 → 70% quickly. The remaining 30% is held back so the bar doesn't
+  // claim "done" before the chunk actually parses — `finishProgress`
+  // completes it on the matching `afterEach`.
+  el.style.opacity = '1'
+  el.style.transform = 'scaleX(0)'
+  // Force a reflow so the browser registers the 0% start before the
+  // 70% transition kicks in.
+  el.offsetHeight // eslint-disable-line @typescript-eslint/no-unused-expressions
+  el.style.transform = 'scaleX(0.7)'
+}
+
+function finishProgress() {
+  const el = ensureProgressEl()
+  if (!el) return
+  el.style.transform = 'scaleX(1)'
+  progressTimer = setTimeout(() => {
+    el.style.opacity = '0'
+    progressTimer = setTimeout(() => {
+      el.style.transform = 'scaleX(0)'
+    }, 240)
+  }, 180)
+}
+
 router.beforeEach(async (to) => {
+  startProgress()
   document.title = to.meta.title ? `${to.meta.title as string} · Amodel` : 'Amodel'
 
   if (to.meta.public) return true
@@ -133,5 +186,8 @@ router.beforeEach(async (to) => {
   }
   return true
 })
+
+router.afterEach(() => { finishProgress() })
+router.onError(() => { finishProgress() })
 
 export default router

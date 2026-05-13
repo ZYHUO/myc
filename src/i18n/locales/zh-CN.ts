@@ -187,7 +187,10 @@ export default {
       baseUrlHint: '把你的 SDK 或 HTTP 客户端指向这个 URL，OpenAI 和 Anthropic 协议都用同一个根。',
       apiKey: 'API 密钥',
       useIt: '快速接入',
-      endpointsHint: '可用端点：/v1/messages、/v1/chat/completions、/v1/responses、/v1/models、/v1/usage。网关会根据分组的协议自动路由。',
+      endpointsHint: '可用端点：/v1/messages、/v1/chat/completions、/v1/responses、/v1/models、/v1/usage。网关会根据分组协议自动路由。',
+      modelComment: '改成你部署支持的具体 Gemini 模型',
+      codexConfigHint: '放到 Codex CLI 配置目录下；这个文件不含密钥，密钥在同目录的 auth.json。',
+      openCodeHint: '放在 OpenCode 工作区根目录。',
     },
     toast: {
       created: '密钥已创建',

@@ -17,6 +17,17 @@ export interface ApiKey {
   key: string
   group_id: number
   group_name: string
+  /**
+   * Platform of the bound group. Drives which client tabs the "Use this
+   * key" modal shows (Claude Code vs Codex vs Gemini CLI vs …).
+   */
+  group_platform: 'anthropic' | 'openai' | 'gemini' | 'antigravity' | string
+  /**
+   * For OpenAI-platform groups: whether the gateway will dispatch incoming
+   * `/v1/messages` (Anthropic protocol) requests to OpenAI upstreams. When
+   * true we also offer Claude Code as a client option on such keys.
+   */
+  group_allow_messages_dispatch: boolean
   /** sub2api uses `active` and `inactive`; we render the rest defensively. */
   status: 'active' | 'inactive' | 'disabled' | 'error'
   ip_whitelist: string[] | null
@@ -59,7 +70,8 @@ export interface UpdateKeyPayload {
 const MOCK_KEYS: ApiKey[] = [
   {
     id: '1', name: 'production-backend', key: 'sk-proABC123abcdef9876543210fedcba0987654321abcdef0123456789ABCDEFo5p6',
-    group_id: 2, group_name: 'default', status: 'active',
+    group_id: 2, group_name: 'default', group_platform: 'anthropic', group_allow_messages_dispatch: false,
+    status: 'active',
     ip_whitelist: null, ip_blacklist: null, last_used_at: '2026-05-12T01:21:16Z',
     quota: 0, quota_used: 12.4, expires_at: null,
     created_at: '2025-11-02T08:30:00Z', updated_at: '2026-05-12T01:21:16Z',
@@ -68,7 +80,8 @@ const MOCK_KEYS: ApiKey[] = [
   },
   {
     id: '2', name: 'test', key: 'sk-tes456DEFabc987654321def0987654321abcdef0123456789ABCDEF123456l5k4',
-    group_id: 5, group_name: 'free', status: 'active',
+    group_id: 5, group_name: 'free', group_platform: 'openai', group_allow_messages_dispatch: true,
+    status: 'active',
     ip_whitelist: null, ip_blacklist: null, last_used_at: '2026-05-10T14:20:00Z',
     quota: 0, quota_used: 0, expires_at: null,
     created_at: '2025-12-15T14:20:00Z', updated_at: '2026-05-10T14:20:00Z',
@@ -83,7 +96,7 @@ interface RawApiKey {
   key?: string
   group_id?: number
   group_name?: string
-  group?: { id: number; name: string; platform?: string }
+  group?: { id: number; name: string; platform?: string; allow_messages_dispatch?: boolean }
   status?: string
   ip_whitelist?: string[] | null
   ip_blacklist?: string[] | null
@@ -108,6 +121,8 @@ function mapKey(raw: RawApiKey): ApiKey {
     key: raw.key || '',
     group_id: raw.group_id ?? 0,
     group_name: raw.group?.name || raw.group_name || '—',
+    group_platform: (raw.group?.platform as ApiKey['group_platform']) || 'anthropic',
+    group_allow_messages_dispatch: raw.group?.allow_messages_dispatch ?? false,
     status: (raw.status as ApiKey['status']) || 'active',
     ip_whitelist: raw.ip_whitelist ?? null,
     ip_blacklist: raw.ip_blacklist ?? null,
@@ -145,6 +160,8 @@ export async function createKey(data: { name: string; group_id: number }): Promi
       key: `sk-mock-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`.slice(0, 64),
       group_id: data.group_id,
       group_name: 'default',
+      group_platform: 'anthropic',
+      group_allow_messages_dispatch: false,
       status: 'active',
       ip_whitelist: null, ip_blacklist: null, last_used_at: null,
       quota: 0, quota_used: 0, expires_at: null,

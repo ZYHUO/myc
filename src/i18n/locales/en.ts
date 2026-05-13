@@ -195,6 +195,9 @@ export default {
       apiKey: 'API key',
       useIt: 'Quick start',
       endpointsHint: 'Available endpoints: /v1/messages, /v1/chat/completions, /v1/responses, /v1/models, /v1/usage. The gateway routes by group platform automatically.',
+      modelComment: 'Override with whichever Gemini model your deployment exposes',
+      codexConfigHint: "Place under your Codex CLI config dir; it doesn't include the API key — that's in auth.json next to it.",
+      openCodeHint: 'Drop this file at the root of your OpenCode workspace.',
     },
     toast: {
       created: 'API key created',

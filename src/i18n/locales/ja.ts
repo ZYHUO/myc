@@ -188,6 +188,9 @@ export default {
       apiKey: 'API キー',
       useIt: 'クイックスタート',
       endpointsHint: '利用可能なエンドポイント: /v1/messages、/v1/chat/completions、/v1/responses、/v1/models、/v1/usage。ゲートウェイはグループのプラットフォームに応じて自動でルーティングします。',
+      modelComment: 'デプロイで対応している Gemini モデル名に置き換えてください',
+      codexConfigHint: 'Codex CLI の設定ディレクトリに配置。このファイルに API キーは含まれません（隣の auth.json に入ります）。',
+      openCodeHint: 'OpenCode ワークスペースのルートに配置してください。',
     },
     toast: {
       created: 'キーを作成しました',

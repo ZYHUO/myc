@@ -169,8 +169,13 @@ function maskKey(key: string): string {
       <div v-for="i in 3" :key="i" class="h-16 rounded-lg bg-muted animate-pulse" />
     </div>
 
-    <!-- Keys Table -->
-    <UiCard v-else flat>
+    <!-- Empty -->
+    <UiCard v-else-if="keys.length === 0" flat class="py-12 text-center text-sm text-muted-fg">
+      {{ t('keys.empty') }}
+    </UiCard>
+
+    <!-- Desktop table (md+) -->
+    <UiCard v-else flat class="hidden md:block">
       <UiTable>
         <thead>
           <tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.18em] text-muted-fg">
@@ -214,12 +219,52 @@ function maskKey(key: string): string {
               </div>
             </td>
           </tr>
-          <tr v-if="keys.length === 0">
-            <td colspan="7" class="px-4 py-12 text-center text-muted-fg text-sm">{{ t('keys.empty') }}</td>
-          </tr>
         </tbody>
       </UiTable>
     </UiCard>
+
+    <!-- Mobile cards (< md) — a 7-column table on a 360 px screen is
+         basically unusable; render each key as a stacked card instead. -->
+    <div v-if="!loading && keys.length > 0" class="md:hidden space-y-3">
+      <UiCard v-for="(key, idx) in keys" :key="key.id" class="stagger-item" :style="{ animationDelay: `${idx * 50}ms` }">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <p class="text-sm font-medium truncate">{{ key.name || '—' }}</p>
+              <UiStatusDot :status="key.status === 'active' ? 'online' : 'disabled'" />
+            </div>
+            <div class="mt-1 flex items-center gap-2">
+              <code class="font-mono text-xs text-muted-fg truncate">{{ maskKey(key.key) }}</code>
+              <UiCopyButton :text="key.key" />
+            </div>
+          </div>
+          <UiBadge variant="gray" class="shrink-0">{{ key.group_name }}</UiBadge>
+        </div>
+
+        <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-fg">
+          <div>
+            <span class="uppercase tracking-[0.12em]">{{ t('keys.cols.used') }}</span>
+            <span class="ml-2 font-mono">{{ formatLastUsed(key.last_used_at) }}</span>
+          </div>
+          <div>
+            <span class="uppercase tracking-[0.12em]">{{ t('keys.cols.created') }}</span>
+            <span class="ml-2 font-mono">{{ formatDate(key.created_at) }}</span>
+          </div>
+        </div>
+
+        <div class="mt-3 flex items-center gap-1 border-t border-border pt-2 -mx-1">
+          <UiButton variant="ghost" size="sm" class="flex-1" @click="openConnect(key)">
+            {{ t('keys.actions.use') }}
+          </UiButton>
+          <UiButton variant="ghost" size="sm" class="flex-1" @click="openEdit(key)">
+            {{ t('common.actions.edit') }}
+          </UiButton>
+          <UiButton variant="ghost" size="sm" class="flex-1 text-destructive" @click="handleDelete(key)">
+            {{ t('common.actions.delete') }}
+          </UiButton>
+        </div>
+      </UiCard>
+    </div>
 
     <!-- Create Key Modal -->
     <UiModal v-model="showCreateModal" :title="t('keys.modal.createTitle')">
