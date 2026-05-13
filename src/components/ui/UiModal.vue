@@ -76,22 +76,19 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <Transition name="modal">
       <!--
-        Outer wrapper. The padding here is what keeps the dialog away from
-        the viewport edge on tablets/desktop. On mobile we drop the padding
-        to 0 so the dialog can fill the screen edge-to-edge.
+        Outer wrapper. Padding visible on ALL sizes so the dialog reads as
+        a centered card with margin, not a screen-filling sheet. The
+        previous attempt at `items-stretch` on mobile fixed the trap-bug
+        but made the modal look like a full new page — visually
+        disorienting.
 
-        Flex column + items-stretch makes the dialog grow to the available
-        height. Combined with `max-height: 100dvh` (dvh = dynamic viewport
-        height, accounts for mobile browser chrome) the dialog can never
-        be taller than the screen.
-
-        `overscroll-behavior: contain` stops a body-bounce / pull-to-refresh
-        from leaking through when the user reaches the top or bottom of the
-        scrolling content inside the dialog.
+        `items-center justify-center` keeps the dialog as a card; the
+        `max-h-[calc(100dvh-1.5rem)]` on the dialog itself ensures the
+        wrapper's padding stays visible even when content overflows.
       -->
       <div
         v-if="model"
-        class="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
         @click.self="onBackdrop"
       >
         <!-- Backdrop -->
@@ -100,19 +97,19 @@ onBeforeUnmount(() => {
         <!-- Dialog. Three-row flex (header / body / footer); only the body
              scrolls. Header + footer stay anchored so the close button and
              the action buttons are always reachable regardless of content
-             length. The previous version put no scroller anywhere, so long
-             content (e.g. Codex CLI config) pushed both bars off-screen and
-             trapped the user. -->
+             length. Max-height leaves a sliver of backdrop visible on top
+             and bottom — visually anchors the modal as a "card", not a
+             "page". -->
         <div
           ref="dialogRef"
-          class="relative w-full sm:max-w-[480px] sm:rounded-xl bg-card border border-border shadow-xl flex flex-col"
-          :style="{ maxHeight: '100dvh' }"
+          class="relative w-full max-w-[480px] rounded-xl bg-card border border-border shadow-xl flex flex-col"
+          :style="{ maxHeight: 'min(640px, calc(100dvh - 1.5rem))' }"
           role="dialog"
           aria-modal="true"
         >
           <!-- Header — always visible. `shrink-0` keeps it pinned when the
                body overflows. -->
-          <div v-if="title" class="shrink-0 flex items-center justify-between gap-3 px-5 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-border bg-card sticky top-0 z-10">
+          <div v-if="title" class="shrink-0 flex items-center justify-between gap-3 px-5 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-border bg-card rounded-t-xl">
             <h2 class="text-base sm:text-lg font-semibold text-fg truncate">{{ title }}</h2>
             <button
               type="button"
@@ -157,7 +154,7 @@ onBeforeUnmount(() => {
                devices. -->
           <div
             v-if="$slots.footer"
-            class="shrink-0 flex items-center justify-end gap-3 px-5 sm:px-6 pt-3 pb-4 sm:pb-5 border-t border-border bg-card sticky bottom-0 z-10"
+            class="shrink-0 flex items-center justify-end gap-3 px-5 sm:px-6 pt-3 pb-4 sm:pb-5 border-t border-border bg-card rounded-b-xl"
             style="padding-bottom: max(1rem, env(safe-area-inset-bottom))"
           >
             <slot name="footer" />
