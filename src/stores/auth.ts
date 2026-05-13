@@ -47,7 +47,12 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
   const isAuthenticated = computed(() => !!user.value)
 
-  async function login(emailOrUsername: string, password: string, turnstileToken?: string) {
+  async function login(
+    emailOrUsername: string,
+    password: string,
+    turnstileToken?: string,
+    geetestToken?: string,
+  ) {
     if (isMockMode()) {
       await delay(400)
       if (!emailOrUsername || !password) {
@@ -59,10 +64,12 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    // Real API: send email + password (plus turnstile token when the server
-    // has captcha enabled — sub2api's LoginRequest accepts `turnstile_token`).
+    // Real API: sub2api's LoginRequest accepts both `turnstile_token` and
+    // `geetest_token`; the backend only verifies whichever provider the
+    // admin has enabled. We send whichever the SPA collected.
     const body: Record<string, string> = { email: emailOrUsername, password }
     if (turnstileToken) body.turnstile_token = turnstileToken
+    if (geetestToken) body.geetest_token = geetestToken
     const res = await client.post<unknown>('/auth/login', body)
     applyLoginResponse(unwrap<LoginResponse>(res))
   }
@@ -95,6 +102,7 @@ export const useAuthStore = defineStore('auth', () => {
     password: string
     verifyCode?: string
     turnstileToken?: string
+    geetestToken?: string
     promoCode?: string
     invitationCode?: string
     affCode?: string
@@ -112,6 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     if (payload.verifyCode) body.verify_code = payload.verifyCode
     if (payload.turnstileToken) body.turnstile_token = payload.turnstileToken
+    if (payload.geetestToken) body.geetest_token = payload.geetestToken
     if (payload.promoCode) body.promo_code = payload.promoCode
     if (payload.invitationCode) body.invitation_code = payload.invitationCode
     if (payload.affCode) body.aff_code = payload.affCode
@@ -125,7 +134,11 @@ export const useAuthStore = defineStore('auth', () => {
    * `email_verify_enabled` is true on the backend. Returns the countdown
    * (in seconds) the client should observe before re-sending.
    */
-  async function sendVerifyCode(email: string, turnstileToken?: string): Promise<number> {
+  async function sendVerifyCode(
+    email: string,
+    turnstileToken?: string,
+    geetestToken?: string,
+  ): Promise<number> {
     if (isMockMode()) {
       await delay(400)
       return 60
@@ -133,6 +146,7 @@ export const useAuthStore = defineStore('auth', () => {
     const res = await client.post<unknown>('/auth/send-verify-code', {
       email,
       ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+      ...(geetestToken ? { geetest_token: geetestToken } : {}),
     })
     const data = unwrap<{ countdown?: number }>(res)
     return data.countdown ?? 60
@@ -144,13 +158,18 @@ export const useAuthStore = defineStore('auth', () => {
    * does so the same captcha widget can be reused. Returns the countdown
    * (in seconds) the user must wait before requesting another code.
    */
-  async function forgotPassword(email: string, turnstileToken?: string): Promise<number> {
+  async function forgotPassword(
+    email: string,
+    turnstileToken?: string,
+    geetestToken?: string,
+  ): Promise<number> {
     if (isMockMode()) {
       await delay(400)
       return 60
     }
     const body: Record<string, string> = { email }
     if (turnstileToken) body.turnstile_token = turnstileToken
+    if (geetestToken) body.geetest_token = geetestToken
     const res = await client.post<unknown>('/auth/forgot-password', body)
     const data = unwrap<{ countdown?: number }>(res)
     return data.countdown ?? 60

@@ -1,0 +1,1029 @@
+diff --git a/backend/cmd/jwtgen/main.go b/backend/cmd/jwtgen/main.go
+index 9386678..fc8a00c 100644
+--- a/backend/cmd/jwtgen/main.go
++++ b/backend/cmd/jwtgen/main.go
+@@ -33,7 +33,7 @@ func main() {
+ 	}()
+ 
+ 	userRepo := repository.NewUserRepository(client, sqlDB)
+-	authService := service.NewAuthService(client, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(client, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 
+ 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+ 	defer cancel()
+diff --git a/backend/cmd/server/wire_gen.go b/backend/cmd/server/wire_gen.go
+index a550118..950d548 100644
+--- a/backend/cmd/server/wire_gen.go
++++ b/backend/cmd/server/wire_gen.go
+@@ -56,6 +56,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+ 	emailService := service.NewEmailService(settingRepository, emailCache)
+ 	turnstileVerifier := repository.NewTurnstileVerifier()
+ 	turnstileService := service.NewTurnstileService(settingService, turnstileVerifier)
++	geetestVerifier := repository.NewGeetestVerifier()
++	geetestService := service.NewGeetestService(settingService, geetestVerifier)
+ 	emailQueueService := service.ProvideEmailQueueService(emailService)
+ 	promoCodeRepository := repository.NewPromoCodeRepository(client)
+ 	billingCache := repository.NewBillingCache(redisClient)
+@@ -71,7 +73,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+ 	subscriptionService := service.NewSubscriptionService(groupRepository, userSubscriptionRepository, billingCacheService, client, configConfig)
+ 	affiliateRepository := repository.NewAffiliateRepository(client, db)
+ 	affiliateService := service.NewAffiliateService(affiliateRepository, settingService, apiKeyAuthCacheInvalidator, billingCacheService)
+-	authService := service.NewAuthService(client, userRepository, redeemCodeRepository, refreshTokenCache, configConfig, settingService, emailService, turnstileService, emailQueueService, promoService, subscriptionService, affiliateService)
++	authService := service.NewAuthService(client, userRepository, redeemCodeRepository, refreshTokenCache, configConfig, settingService, emailService, turnstileService, geetestService, emailQueueService, promoService, subscriptionService, affiliateService)
+ 	userService := service.NewUserService(userRepository, settingRepository, apiKeyAuthCacheInvalidator, billingCache)
+ 	redeemCache := repository.NewRedeemCache(redisClient)
+ 	redeemService := service.NewRedeemService(redeemCodeRepository, userRepository, subscriptionService, redeemCache, billingCacheService, client, apiKeyAuthCacheInvalidator, affiliateService)
+diff --git a/backend/internal/handler/admin/setting_handler.go b/backend/internal/handler/admin/setting_handler.go
+index 0ea664d..b6807bb 100644
+--- a/backend/internal/handler/admin/setting_handler.go
++++ b/backend/internal/handler/admin/setting_handler.go
+@@ -131,6 +131,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
+ 		TurnstileEnabled:                       settings.TurnstileEnabled,
+ 		TurnstileSiteKey:                       settings.TurnstileSiteKey,
+ 		TurnstileSecretKeyConfigured:           settings.TurnstileSecretKeyConfigured,
++		GeetestEnabled:                         settings.GeetestEnabled,
++		GeetestCaptchaID:                       settings.GeetestCaptchaID,
++		GeetestCaptchaKeyConfigured:            settings.GeetestCaptchaKeyConfigured,
+ 		LinuxDoConnectEnabled:                  settings.LinuxDoConnectEnabled,
+ 		LinuxDoConnectClientID:                 settings.LinuxDoConnectClientID,
+ 		LinuxDoConnectClientSecretConfigured:   settings.LinuxDoConnectClientSecretConfigured,
+@@ -370,6 +373,11 @@ type UpdateSettingsRequest struct {
+ 	TurnstileSiteKey   string `json:"turnstile_site_key"`
+ 	TurnstileSecretKey string `json:"turnstile_secret_key"`
+ 
++	// Geetest v4 设置
++	GeetestEnabled    bool   `json:"geetest_enabled"`
++	GeetestCaptchaID  string `json:"geetest_captcha_id"`
++	GeetestCaptchaKey string `json:"geetest_captcha_key"`
++
+ 	// LinuxDo Connect OAuth 登录
+ 	LinuxDoConnectEnabled      bool   `json:"linuxdo_connect_enabled"`
+ 	LinuxDoConnectClientID     string `json:"linuxdo_connect_client_id"`
+@@ -700,6 +708,21 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
+ 		}
+ 	}
+ 
++	// Geetest 参数验证（同样在留空时保留已存的 captcha_key）
++	if req.GeetestEnabled {
++		if req.GeetestCaptchaID == "" {
++			response.BadRequest(c, "Geetest Captcha ID is required when enabled")
++			return
++		}
++		if req.GeetestCaptchaKey == "" {
++			if previousSettings.GeetestCaptchaKey == "" {
++				response.BadRequest(c, "Geetest Captcha Key is required when enabled")
++				return
++			}
++			req.GeetestCaptchaKey = previousSettings.GeetestCaptchaKey
++		}
++	}
++
+ 	// TOTP 双因素认证参数验证
+ 	// 只有手动配置了加密密钥才允许启用 TOTP 功能
+ 	if req.TotpEnabled && !previousSettings.TotpEnabled {
+@@ -1294,6 +1317,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
+ 		TurnstileEnabled:                 req.TurnstileEnabled,
+ 		TurnstileSiteKey:                 req.TurnstileSiteKey,
+ 		TurnstileSecretKey:               req.TurnstileSecretKey,
++		GeetestEnabled:                   req.GeetestEnabled,
++		GeetestCaptchaID:                 req.GeetestCaptchaID,
++		GeetestCaptchaKey:                req.GeetestCaptchaKey,
+ 		LinuxDoConnectEnabled:            req.LinuxDoConnectEnabled,
+ 		LinuxDoConnectClientID:           req.LinuxDoConnectClientID,
+ 		LinuxDoConnectClientSecret:       req.LinuxDoConnectClientSecret,
+diff --git a/backend/internal/handler/auth_handler.go b/backend/internal/handler/auth_handler.go
+index 1f9a66f..a82fd72 100644
+--- a/backend/internal/handler/auth_handler.go
++++ b/backend/internal/handler/auth_handler.go
+@@ -46,6 +46,10 @@ type RegisterRequest struct {
+ 	Password       string `json:"password" binding:"required,min=6"`
+ 	VerifyCode     string `json:"verify_code"`
+ 	TurnstileToken string `json:"turnstile_token"`
++	// JSON-encoded Geetest v4 challenge envelope (lot_number,
++	// captcha_output, pass_token, gen_time). Parsed server-side by
++	// GeetestService. Only consulted when admin has enabled Geetest.
++	GeetestToken   string `json:"geetest_token"`
+ 	PromoCode      string `json:"promo_code"`      // 注册优惠码
+ 	InvitationCode string `json:"invitation_code"` // 邀请码
+ 	AffCode        string `json:"aff_code"`        // 邀请返利码
+@@ -55,6 +59,7 @@ type RegisterRequest struct {
+ type SendVerifyCodeRequest struct {
+ 	Email          string `json:"email" binding:"required,email"`
+ 	TurnstileToken string `json:"turnstile_token"`
++	GeetestToken   string `json:"geetest_token"`
+ }
+ 
+ // SendVerifyCodeResponse 发送验证码响应
+@@ -68,6 +73,7 @@ type LoginRequest struct {
+ 	Email          string `json:"email" binding:"required,email"`
+ 	Password       string `json:"password" binding:"required"`
+ 	TurnstileToken string `json:"turnstile_token"`
++	GeetestToken   string `json:"geetest_token"`
+ }
+ 
+ // AuthResponse 认证响应格式（匹配前端期望）
+@@ -159,8 +165,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
+ 		return
+ 	}
+ 
+-	// Turnstile 验证（邮箱验证码注册场景避免重复校验一次性 token）
+-	if err := h.authService.VerifyTurnstileForRegister(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c), req.VerifyCode); err != nil {
++	// CAPTCHA 验证：Turnstile 和 Geetest 是平级的备选 — 各自只在启用时
++	// 才校验对应 token，因此可以无条件双调用；如果两者都开启，则两个 token
++	// 都必须有效才能通过（admin 默认是二选一的策略，但代码支持共存）。
++	clientIP := ip.GetClientIP(c)
++	if err := h.authService.VerifyTurnstileForRegister(c.Request.Context(), req.TurnstileToken, clientIP, req.VerifyCode); err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	if err := h.authService.VerifyGeetestForRegister(c.Request.Context(), req.GeetestToken, clientIP, req.VerifyCode); err != nil {
+ 		response.ErrorFrom(c, err)
+ 		return
+ 	}
+@@ -191,8 +204,13 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
+ 		return
+ 	}
+ 
+-	// Turnstile 验证
+-	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
++	// CAPTCHA 验证（Turnstile / Geetest 任一或两者）
++	clientIP := ip.GetClientIP(c)
++	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, clientIP); err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	if err := h.authService.VerifyGeetest(c.Request.Context(), req.GeetestToken, clientIP); err != nil {
+ 		response.ErrorFrom(c, err)
+ 		return
+ 	}
+@@ -218,8 +236,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
+ 		return
+ 	}
+ 
+-	// Turnstile 验证
+-	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
++	// CAPTCHA 验证（Turnstile / Geetest 任一或两者）
++	clientIP := ip.GetClientIP(c)
++	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, clientIP); err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	if err := h.authService.VerifyGeetest(c.Request.Context(), req.GeetestToken, clientIP); err != nil {
+ 		response.ErrorFrom(c, err)
+ 		return
+ 	}
+@@ -565,6 +588,7 @@ func (h *AuthHandler) ValidateInvitationCode(c *gin.Context) {
+ type ForgotPasswordRequest struct {
+ 	Email          string `json:"email" binding:"required,email"`
+ 	TurnstileToken string `json:"turnstile_token"`
++	GeetestToken   string `json:"geetest_token"`
+ }
+ 
+ // ForgotPasswordResponse 忘记密码响应
+@@ -581,8 +605,13 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+ 		return
+ 	}
+ 
+-	// Turnstile 验证
+-	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
++	// CAPTCHA 验证（Turnstile / Geetest 任一或两者）
++	clientIP := ip.GetClientIP(c)
++	if err := h.authService.VerifyGeetest(c.Request.Context(), req.GeetestToken, clientIP); err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, clientIP); err != nil {
+ 		response.ErrorFrom(c, err)
+ 		return
+ 	}
+diff --git a/backend/internal/handler/auth_oauth_pending_flow_test.go b/backend/internal/handler/auth_oauth_pending_flow_test.go
+index 584e575..103d318 100644
+--- a/backend/internal/handler/auth_oauth_pending_flow_test.go
++++ b/backend/internal/handler/auth_oauth_pending_flow_test.go
+@@ -2231,6 +2231,7 @@ CREATE TABLE IF NOT EXISTS user_affiliates (
+ 		nil,
+ 		nil,
+ 		nil,
++		nil,
+ 		options.defaultSubAssigner,
+ 		affiliateService,
+ 	)
+diff --git a/backend/internal/handler/auth_session_revocation_test.go b/backend/internal/handler/auth_session_revocation_test.go
+index f1c6d87..922bf9c 100644
+--- a/backend/internal/handler/auth_session_revocation_test.go
++++ b/backend/internal/handler/auth_session_revocation_test.go
+@@ -35,7 +35,7 @@ func TestAuthHandlerRevokeAllSessionsInvalidatesAccessTokens(t *testing.T) {
+ 			ExpireHour: 1,
+ 		},
+ 	}
+-	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	handler := &AuthHandler{authService: authService}
+ 
+ 	recorder := httptest.NewRecorder()
+diff --git a/backend/internal/handler/auth_wechat_oauth_test.go b/backend/internal/handler/auth_wechat_oauth_test.go
+index b3c7786..e291b7e 100644
+--- a/backend/internal/handler/auth_wechat_oauth_test.go
++++ b/backend/internal/handler/auth_wechat_oauth_test.go
+@@ -1400,6 +1400,7 @@ func newWeChatOAuthTestHandlerWithSettings(t *testing.T, invitationEnabled bool,
+ 		nil,
+ 		nil,
+ 		nil,
++		nil,
+ 	)
+ 
+ 	return &AuthHandler{
+diff --git a/backend/internal/handler/dto/settings.go b/backend/internal/handler/dto/settings.go
+index 551cf0d..fdd8cd7 100644
+--- a/backend/internal/handler/dto/settings.go
++++ b/backend/internal/handler/dto/settings.go
+@@ -51,6 +51,10 @@ type SystemSettings struct {
+ 	TurnstileSiteKey             string `json:"turnstile_site_key"`
+ 	TurnstileSecretKeyConfigured bool   `json:"turnstile_secret_key_configured"`
+ 
++	GeetestEnabled             bool   `json:"geetest_enabled"`
++	GeetestCaptchaID           string `json:"geetest_captcha_id"`
++	GeetestCaptchaKeyConfigured bool  `json:"geetest_captcha_key_configured"`
++
+ 	LinuxDoConnectEnabled                bool   `json:"linuxdo_connect_enabled"`
+ 	LinuxDoConnectClientID               string `json:"linuxdo_connect_client_id"`
+ 	LinuxDoConnectClientSecretConfigured bool   `json:"linuxdo_connect_client_secret_configured"`
+@@ -246,6 +250,8 @@ type PublicSettings struct {
+ 	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
+ 	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
+ 	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
++	GeetestEnabled                   bool                     `json:"geetest_enabled"`
++	GeetestCaptchaID                 string                   `json:"geetest_captcha_id"`
+ 	SiteName                         string                   `json:"site_name"`
+ 	SiteLogo                         string                   `json:"site_logo"`
+ 	SiteSubtitle                     string                   `json:"site_subtitle"`
+diff --git a/backend/internal/handler/setting_handler.go b/backend/internal/handler/setting_handler.go
+index 6c389e3..a2421c1 100644
+--- a/backend/internal/handler/setting_handler.go
++++ b/backend/internal/handler/setting_handler.go
+@@ -47,6 +47,8 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
+ 		LoginAgreementDocuments:          publicLoginAgreementDocumentsToDTO(settings.LoginAgreementDocuments),
+ 		TurnstileEnabled:                 settings.TurnstileEnabled,
+ 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
++		GeetestEnabled:                   settings.GeetestEnabled,
++		GeetestCaptchaID:                 settings.GeetestCaptchaID,
+ 		SiteName:                         settings.SiteName,
+ 		SiteLogo:                         settings.SiteLogo,
+ 		SiteSubtitle:                     settings.SiteSubtitle,
+diff --git a/backend/internal/handler/user_handler_test.go b/backend/internal/handler/user_handler_test.go
+index ffca86d..01870bb 100644
+--- a/backend/internal/handler/user_handler_test.go
++++ b/backend/internal/handler/user_handler_test.go
+@@ -513,7 +513,7 @@ func TestUserHandlerBindEmailIdentityReturnsProfileResponse(t *testing.T) {
+ 		},
+ 	}
+ 	emailService := service.NewEmailService(nil, emailCache)
+-	authService := service.NewAuthService(nil, repo, nil, nil, cfg, nil, emailService, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(nil, repo, nil, nil, cfg, nil, emailService, nil, nil, nil, nil, nil, nil)
+ 	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), authService, nil, nil, nil)
+ 
+ 	body := []byte(`{"email":"new@example.com","verify_code":"123456","password":"new-password"}`)
+@@ -627,7 +627,7 @@ func TestUserHandlerUnbindIdentityRevokesAllUserSessionsWhenAuthServiceConfigure
+ 			ExpireHour: 1,
+ 		},
+ 	}
+-	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), authService, nil, nil, nil)
+ 
+ 	recorder := httptest.NewRecorder()
+@@ -670,7 +670,7 @@ func TestUserHandlerUnbindIdentityDoesNotRevokeSessionsWhenNothingWasUnbound(t *
+ 			ExpireHour: 1,
+ 		},
+ 	}
+-	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), authService, nil, nil, nil)
+ 
+ 	recorder := httptest.NewRecorder()
+@@ -714,7 +714,7 @@ func TestUserHandlerBindEmailIdentityRejectsWrongCurrentPasswordForBoundEmail(t
+ 		},
+ 	}
+ 	emailService := service.NewEmailService(nil, emailCache)
+-	authService := service.NewAuthService(nil, repo, nil, nil, cfg, nil, emailService, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(nil, repo, nil, nil, cfg, nil, emailService, nil, nil, nil, nil, nil, nil)
+ 	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), authService, nil, nil, nil)
+ 
+ 	body := []byte(`{"email":"new@example.com","verify_code":"123456","password":"wrong-password"}`)
+diff --git a/backend/internal/repository/geetest_service.go b/backend/internal/repository/geetest_service.go
+new file mode 100644
+index 0000000..4740446
+--- /dev/null
++++ b/backend/internal/repository/geetest_service.go
+@@ -0,0 +1,81 @@
++package repository
++
++import (
++	"context"
++	"crypto/hmac"
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"fmt"
++	"net/http"
++	"net/url"
++	"strings"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++)
++
++// Geetest v4 validate endpoint. The captcha_id is passed via query string
++// because Geetest's own server-side examples do it that way; the four
++// challenge fields plus a sign_token go in the form-encoded body.
++const geetestVerifyURL = "https://gcaptcha4.geetest.com/validate"
++
++type geetestVerifier struct {
++	httpClient *http.Client
++	verifyURL  string
++}
++
++func NewGeetestVerifier() service.GeetestVerifier {
++	sharedClient, err := httpclient.GetClient(httpclient.Options{
++		Timeout:            10 * time.Second,
++		ValidateResolvedIP: true,
++	})
++	if err != nil {
++		sharedClient = &http.Client{Timeout: 10 * time.Second}
++	}
++	return &geetestVerifier{
++		httpClient: sharedClient,
++		verifyURL:  geetestVerifyURL,
++	}
++}
++
++func (v *geetestVerifier) VerifyToken(
++	ctx context.Context,
++	captchaID, captchaKey string,
++	p *service.GeetestPayload,
++	remoteIP string,
++) (*service.GeetestVerifyResponse, error) {
++	// Geetest v4 protocol: sign_token = HMAC-SHA256(captcha_key, lot_number),
++	// hex-encoded. The frontend never sees captcha_key — it lives only on
++	// the server side.
++	mac := hmac.New(sha256.New, []byte(captchaKey))
++	mac.Write([]byte(p.LotNumber))
++	signToken := hex.EncodeToString(mac.Sum(nil))
++
++	form := url.Values{}
++	form.Set("lot_number", p.LotNumber)
++	form.Set("captcha_output", p.CaptchaOutput)
++	form.Set("pass_token", p.PassToken)
++	form.Set("gen_time", p.GenTime)
++	form.Set("sign_token", signToken)
++
++	endpoint := v.verifyURL + "?captcha_id=" + url.QueryEscape(captchaID)
++	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
++	if err != nil {
++		return nil, fmt.Errorf("create request: %w", err)
++	}
++	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
++
++	resp, err := v.httpClient.Do(req)
++	if err != nil {
++		return nil, fmt.Errorf("send request: %w", err)
++	}
++	defer func() { _ = resp.Body.Close() }()
++
++	var result service.GeetestVerifyResponse
++	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
++		return nil, fmt.Errorf("decode response: %w", err)
++	}
++	return &result, nil
++}
+diff --git a/backend/internal/repository/wire.go b/backend/internal/repository/wire.go
+index 3c0ee9c..ddee0f4 100644
+--- a/backend/internal/repository/wire.go
++++ b/backend/internal/repository/wire.go
+@@ -131,6 +131,7 @@ var ProviderSet = wire.NewSet(
+ 
+ 	// HTTP service ports (DI Strategy A: return interface directly)
+ 	NewTurnstileVerifier,
++	NewGeetestVerifier,
+ 	ProvidePricingRemoteClient,
+ 	ProvideGitHubReleaseClient,
+ 	NewProxyExitInfoProber,
+diff --git a/backend/internal/server/middleware/admin_auth_test.go b/backend/internal/server/middleware/admin_auth_test.go
+index 3fbbb71..303d0db 100644
+--- a/backend/internal/server/middleware/admin_auth_test.go
++++ b/backend/internal/server/middleware/admin_auth_test.go
+@@ -20,7 +20,7 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 
+ 	cfg := &config.Config{JWT: config.JWTConfig{Secret: "test-secret", ExpireHour: 1}}
+-	authService := service.NewAuthService(nil, nil, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authService := service.NewAuthService(nil, nil, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 
+ 	admin := &service.User{
+ 		ID:           1,
+diff --git a/backend/internal/server/middleware/jwt_auth_test.go b/backend/internal/server/middleware/jwt_auth_test.go
+index a643d3b..e9922e5 100644
+--- a/backend/internal/server/middleware/jwt_auth_test.go
++++ b/backend/internal/server/middleware/jwt_auth_test.go
+@@ -60,7 +60,7 @@ func newJWTTestEnv(users map[int64]*service.User) (*gin.Engine, *service.AuthSer
+ 	cfg.JWT.AccessTokenExpireMinutes = 60
+ 
+ 	userRepo := &stubJWTUserRepo{users: users}
+-	authSvc := service.NewAuthService(nil, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authSvc := service.NewAuthService(nil, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	userSvc := service.NewUserService(userRepo, nil, nil, nil)
+ 	mw := NewJWTAuthMiddleware(authSvc, userSvc)
+ 
+@@ -143,7 +143,7 @@ func TestJWTAuth_ValidToken_TouchesLastActive(t *testing.T) {
+ 	cfg.JWT.AccessTokenExpireMinutes = 60
+ 
+ 	userRepo := &stubJWTUserRepo{users: map[int64]*service.User{1: user}}
+-	authSvc := service.NewAuthService(nil, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil)
++	authSvc := service.NewAuthService(nil, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	userSvc := service.NewUserService(userRepo, nil, nil, nil)
+ 	toucher := &recordingActivityToucher{}
+ 
+diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
+index e01e821..5f581d1 100644
+--- a/backend/internal/service/auth_service.go
++++ b/backend/internal/service/auth_service.go
+@@ -70,6 +70,7 @@ type AuthService struct {
+ 	settingService     *SettingService
+ 	emailService       *EmailService
+ 	turnstileService   *TurnstileService
++	geetestService     *GeetestService
+ 	emailQueueService  *EmailQueueService
+ 	promoService       *PromoService
+ 	affiliateService   *AffiliateService
+@@ -96,6 +97,7 @@ func NewAuthService(
+ 	settingService *SettingService,
+ 	emailService *EmailService,
+ 	turnstileService *TurnstileService,
++	geetestService *GeetestService,
+ 	emailQueueService *EmailQueueService,
+ 	promoService *PromoService,
+ 	defaultSubAssigner DefaultSubscriptionAssigner,
+@@ -110,6 +112,7 @@ func NewAuthService(
+ 		settingService:     settingService,
+ 		emailService:       emailService,
+ 		turnstileService:   turnstileService,
++		geetestService:     geetestService,
+ 		emailQueueService:  emailQueueService,
+ 		promoService:       promoService,
+ 		affiliateService:   affiliateService,
+@@ -414,6 +417,38 @@ func (s *AuthService) IsTurnstileEnabled(ctx context.Context) bool {
+ 	return s.turnstileService.IsEnabled(ctx)
+ }
+ 
++// VerifyGeetest validates a Geetest v4 token if (and only if) Geetest is
++// enabled. Returns nil when the feature is off, mirroring the
++// VerifyTurnstile contract — callers can call both unconditionally and
++// each one no-ops when its respective switch is off. When BOTH CAPTCHAs
++// are enabled, the auth handler must pass each its own token; we don't
++// fall through one to the other.
++func (s *AuthService) VerifyGeetest(ctx context.Context, token string, remoteIP string) error {
++	if s.geetestService == nil {
++		return nil
++	}
++	return s.geetestService.VerifyToken(ctx, token, remoteIP)
++}
++
++// VerifyGeetestForRegister mirrors the Turnstile equivalent: when the
++// register call carries a verify-code the user already passed Geetest
++// during the send-code call, so skip a second validation to avoid the
++// one-shot challenge being reused.
++func (s *AuthService) VerifyGeetestForRegister(ctx context.Context, token, remoteIP, verifyCode string) error {
++	if s.IsEmailVerifyEnabled(ctx) && strings.TrimSpace(verifyCode) != "" {
++		return nil
++	}
++	return s.VerifyGeetest(ctx, token, remoteIP)
++}
++
++// IsGeetestEnabled 检查是否启用 Geetest v4 验证
++func (s *AuthService) IsGeetestEnabled(ctx context.Context) bool {
++	if s.geetestService == nil {
++		return false
++	}
++	return s.geetestService.IsEnabled(ctx)
++}
++
+ // IsRegistrationEnabled 检查是否开放注册
+ func (s *AuthService) IsRegistrationEnabled(ctx context.Context) bool {
+ 	if s.settingService == nil {
+diff --git a/backend/internal/service/auth_service_email_bind_test.go b/backend/internal/service/auth_service_email_bind_test.go
+index 8f03f85..4a53d34 100644
+--- a/backend/internal/service/auth_service_email_bind_test.go
++++ b/backend/internal/service/auth_service_email_bind_test.go
+@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS user_provider_default_grants (
+ 		emailSvc = service.NewEmailService(settingRepo, emailCache)
+ 	}
+ 
+-	svc := service.NewAuthService(client, repo, nil, refreshTokenCache, cfg, settingSvc, emailSvc, nil, nil, nil, defaultSubAssigner, nil)
++	svc := service.NewAuthService(client, repo, nil, refreshTokenCache, cfg, settingSvc, emailSvc, nil, nil, nil, nil, defaultSubAssigner, nil)
+ 	return svc, repo, client
+ }
+ 
+@@ -467,7 +467,7 @@ func TestAuthServiceBindEmailIdentity_RevokesExistingAccessAndRefreshTokens(t *t
+ 		},
+ 	}
+ 	emailService := service.NewEmailService(nil, cache)
+-	svc := service.NewAuthService(nil, userRepo, nil, refreshTokenCache, cfg, nil, emailService, nil, nil, nil, nil, nil)
++	svc := service.NewAuthService(nil, userRepo, nil, refreshTokenCache, cfg, nil, emailService, nil, nil, nil, nil, nil, nil)
+ 
+ 	oldTokenPair, err := svc.GenerateTokenPair(ctx, &service.User{
+ 		ID:           41,
+diff --git a/backend/internal/service/auth_service_identity_sync_test.go b/backend/internal/service/auth_service_identity_sync_test.go
+index 53048b9..c7f37b3 100644
+--- a/backend/internal/service/auth_service_identity_sync_test.go
++++ b/backend/internal/service/auth_service_identity_sync_test.go
+@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS user_provider_default_grants (
+ 		values: settings,
+ 	}, cfg)
+ 
+-	svc := service.NewAuthService(client, repo, nil, nil, cfg, settingSvc, nil, nil, nil, nil, defaultSubAssigner, nil)
++	svc := service.NewAuthService(client, repo, nil, nil, cfg, settingSvc, nil, nil, nil, nil, nil, defaultSubAssigner, nil)
+ 	return svc, repo, client
+ }
+ 
+diff --git a/backend/internal/service/domain_constants.go b/backend/internal/service/domain_constants.go
+index 17c40ba..b792e37 100644
+--- a/backend/internal/service/domain_constants.go
++++ b/backend/internal/service/domain_constants.go
+@@ -128,6 +128,11 @@ const (
+ 	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Turnstile Site Key
+ 	SettingKeyTurnstileSecretKey = "turnstile_secret_key" // Turnstile Secret Key
+ 
++	// Geetest v4 滑块验证（与 Turnstile 平级；管理员二选一或共存）
++	SettingKeyGeetestEnabled    = "geetest_enabled"     // 是否启用 Geetest v4 验证
++	SettingKeyGeetestCaptchaID  = "geetest_captcha_id"  // Geetest Captcha ID（公开）
++	SettingKeyGeetestCaptchaKey = "geetest_captcha_key" // Geetest Captcha Key（保密）
++
+ 	// TOTP 双因素认证设置
+ 	SettingKeyTotpEnabled = "totp_enabled" // 是否启用 TOTP 2FA 功能
+ 
+diff --git a/backend/internal/service/email_service.go b/backend/internal/service/email_service.go
+index 9a03ea3..e52c839 100644
+--- a/backend/internal/service/email_service.go
++++ b/backend/internal/service/email_service.go
+@@ -374,44 +374,62 @@ func (s *EmailService) VerifyCode(ctx context.Context, email, code string) error
+ 	return nil
+ }
+ 
+-// buildVerifyCodeEmailBody 构建验证码邮件HTML内容
++// buildVerifyCodeEmailBody renders the verification-code email. The
++// design mirrors the Amodel SPA: cream background, sharp serif display
++// for the brand line, monospace block for the code itself, all-black
++// CTA copy. Inline styles only — most email clients ignore <style> in
++// the head, and Outlook in particular drops shorthand colour names.
+ func (s *EmailService) buildVerifyCodeEmailBody(code, siteName string) string {
+-	return fmt.Sprintf(`
+-<!DOCTYPE html>
++	preheader := fmt.Sprintf("Your %s verification code is %s. Expires in 15 minutes.", siteName, code)
++	return fmt.Sprintf(`<!DOCTYPE html>
+ <html>
+ <head>
+-    <meta charset="UTF-8">
+-    <style>
+-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+-        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+-        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; }
+-        .header h1 { margin: 0; font-size: 24px; }
+-        .content { padding: 40px 30px; text-align: center; }
+-        .code { font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #333; background-color: #f8f9fa; padding: 20px 30px; border-radius: 8px; display: inline-block; margin: 20px 0; font-family: monospace; }
+-        .info { color: #666; font-size: 14px; line-height: 1.6; margin-top: 20px; }
+-        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
+-    </style>
++<meta charset="UTF-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>%s — Verification code</title>
+ </head>
+-<body>
+-    <div class="container">
+-        <div class="header">
+-            <h1>%s</h1>
+-        </div>
+-        <div class="content">
+-            <p style="font-size: 18px; color: #333;">Your verification code is:</p>
+-            <div class="code">%s</div>
+-            <div class="info">
+-                <p>This code will expire in <strong>15 minutes</strong>.</p>
+-                <p>If you did not request this code, please ignore this email.</p>
+-            </div>
+-        </div>
+-        <div class="footer">
+-            <p>This is an automated message, please do not reply.</p>
+-        </div>
+-    </div>
++<body style="margin:0;padding:0;background-color:#f5f4f1;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
++  <span style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">%s</span>
++  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f4f1;">
++    <tr>
++      <td align="center" style="padding:48px 16px;">
++        <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#ffffff;border:1px solid #e8e5df;border-radius:14px;">
++          <tr>
++            <td style="padding:36px 40px 12px 40px;">
++              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
++                <tr>
++                  <td style="width:32px;height:32px;background-color:#1a1a1a;color:#ffffff;border-radius:6px;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:500;vertical-align:middle;">A</td>
++                  <td style="padding-left:12px;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1a1a;letter-spacing:-0.01em;vertical-align:middle;">%s</td>
++                </tr>
++              </table>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:24px 40px 8px 40px;">
++              <p style="margin:0;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#737373;font-weight:500;">Verification code</p>
++              <h1 style="margin:14px 0 0 0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:400;letter-spacing:-0.02em;line-height:1.2;color:#1a1a1a;">Confirm your email</h1>
++              <p style="margin:14px 0 0 0;font-size:14px;line-height:1.6;color:#525252;">Enter the code below to finish signing in. It expires in <strong style="color:#1a1a1a;font-weight:600;">15 minutes</strong>.</p>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:28px 40px 8px 40px;">
++              <div style="background-color:#f5f4f1;border:1px solid #e8e5df;border-radius:10px;padding:24px;text-align:center;">
++                <div style="font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:34px;letter-spacing:0.32em;color:#1a1a1a;font-weight:500;line-height:1;">%s</div>
++              </div>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:24px 40px 40px 40px;">
++              <p style="margin:0;font-size:12px;line-height:1.7;color:#737373;">Didn't request this? You can safely ignore the email — without the code no one can finish signing in.</p>
++            </td>
++          </tr>
++        </table>
++        <p style="margin:24px 0 0 0;font-size:11px;color:#a3a3a3;">Sent by %s · Automated, do not reply</p>
++      </td>
++    </tr>
++  </table>
+ </body>
+-</html>
+-`, siteName, code)
++</html>`, siteName, preheader, siteName, code, siteName)
+ }
+ 
+ // TestSMTPConnectionWithConfig 使用指定配置测试SMTP连接
+@@ -565,50 +583,64 @@ func (s *EmailService) ConsumePasswordResetToken(ctx context.Context, email, tok
+ 	return nil
+ }
+ 
+-// buildPasswordResetEmailBody builds the HTML content for password reset email
++// buildPasswordResetEmailBody renders the reset-password email matching
++// the verification-code template — same colour story, same brand row,
++// same plain black CTA. Copy stays bilingual-friendly (the SPA serves
++// en / zh-CN / ja but the backend doesn't know which locale the user
++// prefers; we lead with English and put the reset link in the open).
+ func (s *EmailService) buildPasswordResetEmailBody(resetURL, siteName string) string {
+-	return fmt.Sprintf(`
+-<!DOCTYPE html>
++	preheader := fmt.Sprintf("Reset your %s password. Link valid for 30 minutes.", siteName)
++	return fmt.Sprintf(`<!DOCTYPE html>
+ <html>
+ <head>
+-    <meta charset="UTF-8">
+-    <style>
+-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+-        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+-        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; }
+-        .header h1 { margin: 0; font-size: 24px; }
+-        .content { padding: 40px 30px; text-align: center; }
+-        .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; margin: 20px 0; }
+-        .button:hover { opacity: 0.9; }
+-        .info { color: #666; font-size: 14px; line-height: 1.6; margin-top: 20px; }
+-        .link-fallback { color: #666; font-size: 12px; word-break: break-all; margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px; }
+-        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
+-        .warning { color: #e74c3c; font-weight: 500; }
+-    </style>
++<meta charset="UTF-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>%s — Reset password</title>
+ </head>
+-<body>
+-    <div class="container">
+-        <div class="header">
+-            <h1>%s</h1>
+-        </div>
+-        <div class="content">
+-            <p style="font-size: 18px; color: #333;">密码重置请求</p>
+-            <p style="color: #666;">您已请求重置密码。请点击下方按钮设置新密码：</p>
+-            <a href="%s" class="button">重置密码</a>
+-            <div class="info">
+-                <p>此链接将在 <strong>30 分钟</strong>后失效。</p>
+-                <p class="warning">如果您没有请求重置密码，请忽略此邮件。您的密码将保持不变。</p>
+-            </div>
+-            <div class="link-fallback">
+-                <p>如果按钮无法点击，请复制以下链接到浏览器中打开：</p>
+-                <p>%s</p>
+-            </div>
+-        </div>
+-        <div class="footer">
+-            <p>这是一封自动发送的邮件，请勿回复。</p>
+-        </div>
+-    </div>
++<body style="margin:0;padding:0;background-color:#f5f4f1;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
++  <span style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">%s</span>
++  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f4f1;">
++    <tr>
++      <td align="center" style="padding:48px 16px;">
++        <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#ffffff;border:1px solid #e8e5df;border-radius:14px;">
++          <tr>
++            <td style="padding:36px 40px 12px 40px;">
++              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
++                <tr>
++                  <td style="width:32px;height:32px;background-color:#1a1a1a;color:#ffffff;border-radius:6px;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:500;vertical-align:middle;">A</td>
++                  <td style="padding-left:12px;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1a1a;letter-spacing:-0.01em;vertical-align:middle;">%s</td>
++                </tr>
++              </table>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:24px 40px 8px 40px;">
++              <p style="margin:0;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#737373;font-weight:500;">Password reset</p>
++              <h1 style="margin:14px 0 0 0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:400;letter-spacing:-0.02em;line-height:1.2;color:#1a1a1a;">Choose a new password</h1>
++              <p style="margin:14px 0 0 0;font-size:14px;line-height:1.6;color:#525252;">Someone — hopefully you — asked to reset the password for this account. Click the button below to pick a new one. The link expires in <strong style="color:#1a1a1a;font-weight:600;">30 minutes</strong>.</p>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:28px 40px 8px 40px;" align="left">
++              <a href="%s" style="display:inline-block;background-color:#1a1a1a;color:#ffffff;text-decoration:none;font-size:14px;font-weight:500;padding:13px 28px;border-radius:8px;letter-spacing:-0.01em;">Reset password</a>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:20px 40px 8px 40px;">
++              <p style="margin:0;font-size:12px;color:#737373;line-height:1.7;">Button not working? Copy this link into your browser:</p>
++              <p style="margin:8px 0 0 0;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:12px;color:#1a1a1a;word-break:break-all;line-height:1.5;">%s</p>
++            </td>
++          </tr>
++          <tr>
++            <td style="padding:24px 40px 40px 40px;">
++              <p style="margin:0;font-size:12px;line-height:1.7;color:#737373;">If you didn't request this, you can safely ignore the email — your password won't change unless you click the link above.</p>
++            </td>
++          </tr>
++        </table>
++        <p style="margin:24px 0 0 0;font-size:11px;color:#a3a3a3;">Sent by %s · Automated, do not reply</p>
++      </td>
++    </tr>
++  </table>
+ </body>
+-</html>
+-`, siteName, resetURL, resetURL)
++</html>`, siteName, preheader, siteName, resetURL, resetURL, siteName)
+ }
+diff --git a/backend/internal/service/geetest_service.go b/backend/internal/service/geetest_service.go
+new file mode 100644
+index 0000000..dd817df
+--- /dev/null
++++ b/backend/internal/service/geetest_service.go
+@@ -0,0 +1,107 @@
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
++)
++
++// Geetest v4 (gcaptcha4) integration — parallel to TurnstileService so
++// callers can verify either CAPTCHA with the same shape:
++//
++//   if err := geetestService.VerifyToken(ctx, token, ip); err != nil { ... }
++//
++// Admin enables Geetest in /admin/settings; frontend sees the public
++// captcha_id via /settings/public and renders the v4 widget. The widget
++// emits four fields (`lot_number`, `captcha_output`, `pass_token`,
++// `gen_time`) — the SPA JSON-encodes them into the `geetest_token`
++// request field so we don't have to thread four parameters through
++// every auth endpoint. We unmarshal here and forward to GeetestVerifier
++// (which talks to https://gcaptcha4.geetest.com/validate).
++
++var (
++	ErrGeetestVerificationFailed = infraerrors.BadRequest("GEETEST_VERIFICATION_FAILED", "geetest verification failed")
++	ErrGeetestNotConfigured      = infraerrors.ServiceUnavailable("GEETEST_NOT_CONFIGURED", "geetest not configured")
++)
++
++// GeetestPayload is the front-end-produced challenge envelope.
++type GeetestPayload struct {
++	LotNumber     string `json:"lot_number"`
++	CaptchaOutput string `json:"captcha_output"`
++	PassToken     string `json:"pass_token"`
++	GenTime       string `json:"gen_time"`
++}
++
++// GeetestVerifyResponse mirrors the relevant fields of Geetest's
++// /validate JSON response.
++type GeetestVerifyResponse struct {
++	Result    string `json:"result"`
++	Reason    string `json:"reason"`
++	CaptchaID string `json:"captcha_id"`
++}
++
++// GeetestVerifier abstracts the HTTP roundtrip so tests can swap a stub.
++type GeetestVerifier interface {
++	VerifyToken(ctx context.Context, captchaID, captchaKey string, payload *GeetestPayload, remoteIP string) (*GeetestVerifyResponse, error)
++}
++
++// GeetestService is the high-level wrapper used by auth flows.
++type GeetestService struct {
++	settingService *SettingService
++	verifier       GeetestVerifier
++}
++
++func NewGeetestService(settingService *SettingService, verifier GeetestVerifier) *GeetestService {
++	return &GeetestService{settingService: settingService, verifier: verifier}
++}
++
++func (s *GeetestService) IsEnabled(ctx context.Context) bool {
++	if s == nil || s.settingService == nil {
++		return false
++	}
++	return s.settingService.IsGeetestEnabled(ctx)
++}
++
++// VerifyToken validates a Geetest v4 challenge. Returns nil when:
++//   - Geetest is disabled (no-op pass-through, matches Turnstile behaviour)
++//   - The verifier responds with `result == "success"`
++//
++// Returns ErrGeetestVerificationFailed for empty / malformed / failed
++// tokens, and ErrGeetestNotConfigured when the admin has flipped the
++// switch but not pasted in the captcha_id/captcha_key pair.
++func (s *GeetestService) VerifyToken(ctx context.Context, token, remoteIP string) error {
++	if !s.IsEnabled(ctx) {
++		return nil
++	}
++	captchaID := s.settingService.GetGeetestCaptchaID(ctx)
++	captchaKey := s.settingService.GetGeetestCaptchaKey(ctx)
++	if captchaID == "" || captchaKey == "" {
++		logger.LegacyPrintf("service.geetest", "%s", "[Geetest] Enabled but captcha_id/captcha_key not configured")
++		return ErrGeetestNotConfigured
++	}
++	if token == "" {
++		return ErrGeetestVerificationFailed
++	}
++	var p GeetestPayload
++	if err := json.Unmarshal([]byte(token), &p); err != nil {
++		logger.LegacyPrintf("service.geetest", "[Geetest] payload parse failed: %v", err)
++		return ErrGeetestVerificationFailed
++	}
++	if p.LotNumber == "" || p.CaptchaOutput == "" || p.PassToken == "" || p.GenTime == "" {
++		return ErrGeetestVerificationFailed
++	}
++
++	result, err := s.verifier.VerifyToken(ctx, captchaID, captchaKey, &p, remoteIP)
++	if err != nil {
++		logger.LegacyPrintf("service.geetest", "[Geetest] request failed: %v", err)
++		return fmt.Errorf("geetest verify: %w", err)
++	}
++	if result.Result != "success" {
++		logger.LegacyPrintf("service.geetest", "[Geetest] verification failed: %s", result.Reason)
++		return ErrGeetestVerificationFailed
++	}
++	return nil
++}
+diff --git a/backend/internal/service/setting_service.go b/backend/internal/service/setting_service.go
+index 86978ee..ff78051 100644
+--- a/backend/internal/service/setting_service.go
++++ b/backend/internal/service/setting_service.go
+@@ -591,6 +591,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
+ 		SettingKeyLoginAgreementDocuments,
+ 		SettingKeyTurnstileEnabled,
+ 		SettingKeyTurnstileSiteKey,
++		SettingKeyGeetestEnabled,
++		SettingKeyGeetestCaptchaID,
+ 		SettingKeySiteName,
+ 		SettingKeySiteLogo,
+ 		SettingKeySiteSubtitle,
+@@ -708,6 +710,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
+ 		LoginAgreementDocuments:          loginAgreementDocuments,
+ 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
+ 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
++		GeetestEnabled:                   settings[SettingKeyGeetestEnabled] == "true",
++		GeetestCaptchaID:                 settings[SettingKeyGeetestCaptchaID],
+ 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
+ 		SiteLogo:                         settings[SettingKeySiteLogo],
+ 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
+@@ -911,6 +915,8 @@ type PublicSettingsInjectionPayload struct {
+ 	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
+ 	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
+ 	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
++	GeetestEnabled                   bool                     `json:"geetest_enabled"`
++	GeetestCaptchaID                 string                   `json:"geetest_captcha_id"`
+ 	SiteName                         string                   `json:"site_name"`
+ 	SiteLogo                         string                   `json:"site_logo"`
+ 	SiteSubtitle                     string                   `json:"site_subtitle"`
+@@ -975,6 +981,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
+ 		LoginAgreementDocuments:          settings.LoginAgreementDocuments,
+ 		TurnstileEnabled:                 settings.TurnstileEnabled,
+ 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
++		GeetestEnabled:                   settings.GeetestEnabled,
++		GeetestCaptchaID:                 settings.GeetestCaptchaID,
+ 		SiteName:                         settings.SiteName,
+ 		SiteLogo:                         settings.SiteLogo,
+ 		SiteSubtitle:                     settings.SiteSubtitle,
+@@ -1468,6 +1476,13 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
+ 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
+ 	}
+ 
++	// Geetest v4 设置（密钥同样只在非空时更新，避免管理员二次保存时把密钥清空）
++	updates[SettingKeyGeetestEnabled] = strconv.FormatBool(settings.GeetestEnabled)
++	updates[SettingKeyGeetestCaptchaID] = settings.GeetestCaptchaID
++	if settings.GeetestCaptchaKey != "" {
++		updates[SettingKeyGeetestCaptchaKey] = settings.GeetestCaptchaKey
++	}
++
+ 	// LinuxDo Connect OAuth 登录
+ 	updates[SettingKeyLinuxDoConnectEnabled] = strconv.FormatBool(settings.LinuxDoConnectEnabled)
+ 	updates[SettingKeyLinuxDoConnectClientID] = settings.LinuxDoConnectClientID
+@@ -2499,6 +2514,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
+ 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
+ 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
+ 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
++		GeetestEnabled:                   settings[SettingKeyGeetestEnabled] == "true",
++		GeetestCaptchaID:                 settings[SettingKeyGeetestCaptchaID],
++		GeetestCaptchaKeyConfigured:      settings[SettingKeyGeetestCaptchaKey] != "",
+ 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
+ 		SiteLogo:                         settings[SettingKeySiteLogo],
+ 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
+@@ -2566,6 +2584,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
+ 	// 敏感信息直接返回，方便测试连接时使用
+ 	result.SMTPPassword = settings[SettingKeySMTPPassword]
+ 	result.TurnstileSecretKey = settings[SettingKeyTurnstileSecretKey]
++	result.GeetestCaptchaKey = settings[SettingKeyGeetestCaptchaKey]
+ 
+ 	// LinuxDo Connect 设置：
+ 	// - 兼容 config.yaml/env（避免老部署因为未迁移到数据库设置而被意外关闭）
+@@ -3075,6 +3094,36 @@ func (s *SettingService) GetTurnstileSecretKey(ctx context.Context) string {
+ 	return value
+ }
+ 
++// IsGeetestEnabled returns whether the admin has flipped on Geetest v4
++// CAPTCHA. Mirrors IsTurnstileEnabled.
++func (s *SettingService) IsGeetestEnabled(ctx context.Context) bool {
++	value, err := s.settingRepo.GetValue(ctx, SettingKeyGeetestEnabled)
++	if err != nil {
++		return false
++	}
++	return value == "true"
++}
++
++// GetGeetestCaptchaID returns the public captcha_id (frontend embeds it
++// in the v4 widget script). Empty when not configured.
++func (s *SettingService) GetGeetestCaptchaID(ctx context.Context) string {
++	value, err := s.settingRepo.GetValue(ctx, SettingKeyGeetestCaptchaID)
++	if err != nil {
++		return ""
++	}
++	return value
++}
++
++// GetGeetestCaptchaKey returns the secret captcha_key used to sign the
++// /validate request. Empty when not configured.
++func (s *SettingService) GetGeetestCaptchaKey(ctx context.Context) string {
++	value, err := s.settingRepo.GetValue(ctx, SettingKeyGeetestCaptchaKey)
++	if err != nil {
++		return ""
++	}
++	return value
++}
++
+ // IsIdentityPatchEnabled 检查是否启用身份补丁（Claude -> Gemini systemInstruction 注入）
+ func (s *SettingService) IsIdentityPatchEnabled(ctx context.Context) bool {
+ 	value, err := s.settingRepo.GetValue(ctx, SettingKeyEnableIdentityPatch)
+diff --git a/backend/internal/service/settings_view.go b/backend/internal/service/settings_view.go
+index bfe8599..aecd3b6 100644
+--- a/backend/internal/service/settings_view.go
++++ b/backend/internal/service/settings_view.go
+@@ -39,6 +39,11 @@ type SystemSettings struct {
+ 	TurnstileSecretKey           string
+ 	TurnstileSecretKeyConfigured bool
+ 
++	GeetestEnabled            bool
++	GeetestCaptchaID          string
++	GeetestCaptchaKey         string
++	GeetestCaptchaKeyConfigured bool
++
+ 	// LinuxDo Connect OAuth 登录
+ 	LinuxDoConnectEnabled                bool
+ 	LinuxDoConnectClientID               string
+@@ -218,6 +223,8 @@ type PublicSettings struct {
+ 	LoginAgreementDocuments          []LoginAgreementDocument
+ 	TurnstileEnabled                 bool
+ 	TurnstileSiteKey                 string
++	GeetestEnabled                   bool
++	GeetestCaptchaID                 string
+ 	SiteName                         string
+ 	SiteLogo                         string
+ 	SiteSubtitle                     string
+diff --git a/backend/internal/service/wire.go b/backend/internal/service/wire.go
+index f0f5ff1..e71ec75 100644
+--- a/backend/internal/service/wire.go
++++ b/backend/internal/service/wire.go
+@@ -480,6 +480,7 @@ var ProviderSet = wire.NewSet(
+ 	NewEmailService,
+ 	ProvideEmailQueueService,
+ 	NewTurnstileService,
++	NewGeetestService,
+ 	NewSubscriptionService,
+ 	wire.Bind(new(DefaultSubscriptionAssigner), new(*SubscriptionService)),
+ 	ProvideConcurrencyService,

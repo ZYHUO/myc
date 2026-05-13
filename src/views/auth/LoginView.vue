@@ -8,7 +8,7 @@ import { useToast } from '@/composables'
 import { UiInput, UiButton } from '@/components/ui'
 import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
 import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
-import UiTurnstile from '@/components/ui/UiTurnstile.vue'
+import UiCaptcha, { type CaptchaState } from '@/components/ui/UiCaptcha.vue'
 import AuthAside from '@/components/auth/AuthAside.vue'
 import { isMockMode } from '@/api/_util'
 
@@ -22,14 +22,16 @@ const { t } = useI18n()
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
-const turnstileToken = ref('')
-const turnstileRef = ref<InstanceType<typeof UiTurnstile> | null>(null)
+const captcha = ref<CaptchaState>({ turnstileToken: '', geetestToken: '' })
+const captchaRef = ref<InstanceType<typeof UiCaptcha> | null>(null)
 
 const settings = computed(() => settingsStore.settings)
 const showRegister = computed(() => settings.value.registration_enabled)
 const showPasswordReset = computed(() => settings.value.password_reset_enabled)
-const turnstileEnabled = computed(() => settings.value.turnstile_enabled)
-const turnstileSiteKey = computed(() => settings.value.turnstile_site_key || '')
+// At least one CAPTCHA provider was flipped on by the admin.
+const captchaRequired = computed(
+  () => settings.value.turnstile_enabled || settings.value.geetest_enabled,
+)
 
 // OAuth providers the admin has enabled. Each entry resolves to a real
 // sub2api start route under /api/v1/auth/oauth/{provider}/start; the
@@ -75,19 +77,24 @@ async function handleSubmit() {
     toast.error(t('auth.login.emailRequired'))
     return
   }
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  if (captchaRequired.value && !(captchaRef.value?.ready)) {
     toast.error(t('turnstile.pleaseComplete'))
     return
   }
   submitting.value = true
   try {
-    await auth.login(email.value.trim(), password.value, turnstileToken.value || undefined)
+    await auth.login(
+      email.value.trim(),
+      password.value,
+      captcha.value.turnstileToken || undefined,
+      captcha.value.geetestToken || undefined,
+    )
     toast.success(t('auth.login.success'))
     await router.replace(redirectTarget.value)
   } catch (err) {
     const message = err instanceof Error ? err.message : t('auth.login.failed')
     toast.error(message)
-    if (turnstileEnabled.value) turnstileRef.value?.reset()
+    if (captchaRequired.value) captchaRef.value?.reset()
   } finally {
     submitting.value = false
   }
@@ -146,16 +153,12 @@ async function handleSubmit() {
             />
           </div>
 
-          <div v-if="turnstileEnabled" class="pt-1">
-            <UiTurnstile
-              ref="turnstileRef"
-              :sitekey="turnstileSiteKey"
-              :model-value="turnstileToken"
-              @update:model-value="turnstileToken = $event"
-              @expired="turnstileToken = ''"
-              @error="turnstileToken = ''"
-            />
-          </div>
+          <UiCaptcha
+            v-if="captchaRequired"
+            ref="captchaRef"
+            v-model="captcha"
+            @error="captcha = { turnstileToken: '', geetestToken: '' }"
+          />
 
           <UiButton
             type="submit"

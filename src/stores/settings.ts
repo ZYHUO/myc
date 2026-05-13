@@ -29,6 +29,14 @@ export interface PublicSettings {
   // Anti-abuse
   turnstile_enabled: boolean
   turnstile_site_key: string
+  /**
+   * Geetest v4 is a peer to Turnstile. The SPA prefers Geetest when
+   * both flags are on (a deliberate UX call — one CAPTCHA per page is
+   * less hostile than two). `geetest_captcha_id` is public; the secret
+   * captcha_key stays on the server.
+   */
+  geetest_enabled: boolean
+  geetest_captcha_id: string
 
   // Registration extras
   promo_code_enabled: boolean
@@ -87,6 +95,8 @@ const DEFAULT_SETTINGS: PublicSettings = {
   registration_email_suffix_whitelist: [],
   turnstile_enabled: false,
   turnstile_site_key: '',
+  geetest_enabled: false,
+  geetest_captcha_id: '',
   promo_code_enabled: false,
   invitation_code_enabled: false,
   affiliate_enabled: false,

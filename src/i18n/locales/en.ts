@@ -815,6 +815,11 @@ export default {
     pleaseComplete: 'Please complete the captcha first.',
   },
 
+  geetest: {
+    missingCaptchaId: 'Geetest is enabled but no captcha ID is configured. Ask the administrator to paste the Geetest captcha_id, or disable Geetest.',
+    failed: 'Captcha verification failed. Please try again.',
+  },
+
   agreement: {
     modalTitle: 'Agreement',
     empty: 'The administrator has not published the content for this document yet.',

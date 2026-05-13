@@ -794,6 +794,11 @@ export default {
     pleaseComplete: '先にキャプチャを完了してください。',
   },
 
+  geetest: {
+    missingCaptchaId: 'Geetest が有効ですが captcha ID が未設定です。管理者に captcha_id の入力、または Geetest の無効化を依頼してください。',
+    failed: 'キャプチャ認証に失敗しました。再度お試しください。',
+  },
+
   agreement: {
     modalTitle: '同意事項',
     empty: '管理者はこのドキュメントの内容をまだ公開していません。',

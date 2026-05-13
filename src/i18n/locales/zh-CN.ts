@@ -794,6 +794,11 @@ export default {
     pleaseComplete: '请先完成人机验证。',
   },
 
+  geetest: {
+    missingCaptchaId: '已启用极验，但未配置 captcha ID。请管理员在后台填写 Geetest captcha_id，或关闭极验。',
+    failed: '人机验证失败，请重试。',
+  },
+
   agreement: {
     modalTitle: '协议条款',
     empty: '管理员尚未发布该文档内容。',
