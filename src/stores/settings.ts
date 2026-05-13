@@ -51,6 +51,12 @@ export interface PublicSettings {
   contact_info: string
   home_content: string
   version: string
+  /**
+   * Optional admin override for the AI gateway base URL shown in the
+   * "Use this key" modal. When empty (the default) the SPA falls back
+   * to `${window.location.origin}/v1`.
+   */
+  api_base_url: string
 
   // Terms of service. The upstream payload uses `{id, title, content_md}`
   // (markdown text, NOT a URL). Older / forked deployments may return
@@ -97,6 +103,7 @@ const DEFAULT_SETTINGS: PublicSettings = {
   contact_info: '',
   home_content: '',
   version: '',
+  api_base_url: '',
   login_agreement_enabled: false,
   login_agreement_mode: 'modal',
   login_agreement_documents: [],

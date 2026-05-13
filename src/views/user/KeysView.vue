@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { UiCard, UiButton, UiTable, UiStatusDot, UiBadge, UiCopyButton, UiModal, UiInput, UiSelect } from '@/components/ui'
+import KeyEditModal from '@/components/keys/KeyEditModal.vue'
+import KeyConnectModal from '@/components/keys/KeyConnectModal.vue'
 import { useToast, useConfirm } from '@/composables'
 import { getKeys, createKey, deleteKey } from '@/api/keys'
 import type { ApiKey } from '@/api/keys'
@@ -20,6 +22,28 @@ const creating = ref(false)
 const newKeyName = ref('')
 const newKeyGroupId = ref<number>(0)
 const availableGroups = ref<{ id: number; name: string }[]>([])
+
+// Edit + Connect modal state
+const showEditModal = ref(false)
+const showConnectModal = ref(false)
+const activeKey = ref<ApiKey | null>(null)
+
+async function openEdit(k: ApiKey) {
+  // Load groups before opening so the select isn't empty in the modal.
+  await loadGroups()
+  activeKey.value = k
+  showEditModal.value = true
+}
+
+function openConnect(k: ApiKey) {
+  activeKey.value = k
+  showConnectModal.value = true
+}
+
+function onKeySaved(updated: ApiKey) {
+  const idx = keys.value.findIndex((k) => k.id === updated.id)
+  if (idx >= 0) keys.value[idx] = updated
+}
 
 onMounted(async () => {
   try {
@@ -177,7 +201,13 @@ function maskKey(key: string): string {
             <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatLastUsed(key.last_used_at) }}</td>
             <td class="px-4 py-3 font-mono text-sm text-muted-fg">{{ formatDate(key.created_at) }}</td>
             <td class="px-4 py-3">
-              <div class="flex items-center justify-end gap-1">
+              <div class="flex items-center justify-end gap-0.5">
+                <UiButton variant="ghost" size="sm" @click="openConnect(key)">
+                  {{ t('keys.actions.use') }}
+                </UiButton>
+                <UiButton variant="ghost" size="sm" @click="openEdit(key)">
+                  {{ t('common.actions.edit') }}
+                </UiButton>
                 <UiButton variant="ghost" size="sm" class="text-destructive" @click="handleDelete(key)">
                   {{ t('common.actions.delete') }}
                 </UiButton>
@@ -214,5 +244,17 @@ function maskKey(key: string): string {
         </UiButton>
       </template>
     </UiModal>
+
+    <!-- Edit + Use modals -->
+    <KeyEditModal
+      v-model="showEditModal"
+      :api-key="activeKey"
+      :groups="availableGroups"
+      @saved="onKeySaved"
+    />
+    <KeyConnectModal
+      v-model="showConnectModal"
+      :api-key="activeKey"
+    />
   </div>
 </template>
