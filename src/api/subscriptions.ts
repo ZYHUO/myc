@@ -69,21 +69,22 @@ export async function getSubscriptions(): Promise<Subscription[]> {
     await delay()
     return MOCK_SUBSCRIPTIONS.map(s => ({ ...s }))
   }
-  // TODO(sub2api): swap to the canonical user-subscriptions route once the
-  // backend exposes one. Today the /subscriptions endpoint isn't wired, so
-  // a 404 is the expected response and we surface an empty list rather
-  // than an error toast.
-  try {
-    const body = unwrap<{ items?: unknown[] } | unknown[]>(await client.get('/subscriptions'))
-    const items = Array.isArray(body) ? body : body?.items ?? []
-    return items.map(mapSub)
-  } catch (err) {
-    if (httpStatus(err) === 404) {
-      if (import.meta.env.DEV) {
-        console.warn('[subscriptions] /subscriptions endpoint not available on this backend yet')
-      }
-      return []
+  // Upstream sub2api exposes both /subscriptions (full list) and
+  // /subscriptions/active (currently-active only). Canonical first; fall
+  // back to /active for forks that disabled the broader endpoint. Both
+  // returning 404 means the deployment compiled subscriptions out — we
+  // surface an empty list rather than an error toast.
+  for (const path of ['/subscriptions', '/subscriptions/active']) {
+    try {
+      const body = unwrap<{ items?: unknown[] } | unknown[]>(await client.get(path))
+      const items = Array.isArray(body) ? body : body?.items ?? []
+      return items.map(mapSub)
+    } catch (err) {
+      if (httpStatus(err) !== 404) throw err
     }
-    throw err
   }
+  if (import.meta.env.DEV) {
+    console.warn('[subscriptions] neither /subscriptions nor /subscriptions/active responded — deployment lacks the subscription module')
+  }
+  return []
 }
