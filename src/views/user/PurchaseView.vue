@@ -122,10 +122,9 @@ async function handleProceedToPay() {
   paying.value = true
   try {
     const order = await payment.createOrder({
-      type: 'recharge',
+      order_type: 'recharge',
       amount,
-      channel_id: selectedChannel.value.id,
-      provider: selectedChannel.value.key,
+      payment_type: selectedChannel.value.key,
     })
     if (order.pay_url) {
       // Open the provider in a new tab so the SPA state survives.
@@ -206,10 +205,9 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
   paying.value = true
   try {
     const order = await payment.createOrder({
-      type: 'subscription',
+      order_type: 'subscription',
       plan_id: plan.id,
-      channel_id: selectedChannel.value.id,
-      provider: selectedChannel.value.key,
+      payment_type: selectedChannel.value.key,
     })
     if (order.pay_url) {
       window.open(order.pay_url, '_blank', 'noopener')

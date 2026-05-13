@@ -81,7 +81,7 @@ function formatType(type: string) {
 }
 
 function formatMethod(order: payment.PaymentOrder) {
-  return order.payment_method || order.provider || '—'
+  return order.payment_type || '—'
 }
 
 function canRefund(status: payment.PaymentOrder['status']): boolean {
@@ -124,7 +124,7 @@ function canRefund(status: payment.PaymentOrder['status']): boolean {
       <tbody>
         <tr v-for="order in orders" :key="order.id" class="border-b border-border last:border-0 row-hover">
           <td class="px-4 py-3 font-mono text-sm">{{ order.out_trade_no }}</td>
-          <td class="px-4 py-3 text-sm">{{ formatType(order.type) }}</td>
+          <td class="px-4 py-3 text-sm">{{ formatType(order.order_type) }}</td>
           <td class="px-4 py-3 font-mono text-sm tabular-nums">${{ order.amount.toFixed(2) }}</td>
           <td class="px-4 py-3">
             <UiBadge :variant="statusVariant(order.status)">{{ localizedStatus(order.status) }}</UiBadge>

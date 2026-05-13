@@ -42,13 +42,21 @@ export interface PaymentPlan {
 }
 
 export interface PaymentChannel {
-  id: number
-  /** Stable string identifier used as the `provider` field on order creation. */
+  /**
+   * sub2api's payment-method identifier (`payment_type` in the
+   * CreateOrder body): "alipay" | "wxpay" | "stripe" | "easypay" |
+   * "airwallex" | "card" | "link" | "alipay_direct" | "wxpay_direct".
+   * The same value is what `/payment/limits` keys its `methods` map on.
+   */
   key: string
   name: string
-  description?: string
+  /** Server-imposed per-method ceiling (USD). 0 means inherit global cap. */
+  min_amount: number
+  max_amount: number
+  fee_rate: number
+  currency: string
+  daily_limit: number
   enabled: boolean
-  group_ids?: number[]
 }
 
 export interface PaymentLimits {
@@ -61,11 +69,12 @@ export interface PaymentLimits {
 export interface PaymentOrder {
   id: string
   out_trade_no: string
-  type: 'recharge' | 'subscription'
+  /** sub2api ships this as `order_type`; we mirror the same key client-side. */
+  order_type: 'recharge' | 'subscription'
   amount: number
   status: 'pending' | 'paid' | 'completed' | 'cancelled' | 'refunded' | 'expired' | 'failed'
-  provider: string
-  payment_method?: string
+  /** Concrete method that produced the order (alipay / wxpay / stripe / …). */
+  payment_type: string
   plan_id?: number
   plan_name?: string
   created_at: string
@@ -74,12 +83,17 @@ export interface PaymentOrder {
 }
 
 export interface CreateOrderRequest {
-  type: 'recharge' | 'subscription'
+  /** sub2api enum: "recharge" (balance top-up) or "subscription" (plan). */
+  order_type: 'recharge' | 'subscription'
+  /** Required by the backend (`binding:"required"`). One of the
+   *  payment-method keys returned by `getChannels()`. */
+  payment_type: string
+  /** Required for recharge orders; ignored for subscription. */
   amount?: number
+  /** Required for subscription orders; ignored for recharge. */
   plan_id?: number
-  /** sub2api uses `channel_id` server-side; we accept either provider string or numeric channel. */
-  channel_id?: number
-  provider?: string
+  /** Optional return URL for the gateway to bounce back to. */
+  return_url?: string
 }
 
 export interface CreateOrderResponse {
@@ -117,18 +131,42 @@ interface RawConfig {
   help_image_url?: string
 }
 
-interface RawChannel {
-  ID: number
-  Name: string
-  Description?: string
-  Status: string
-  GroupIDs?: number[] | null
+/**
+ * Upstream `MethodLimits` from `/payment/limits` (see sub2api
+ * `service.MethodLimits`). The map key on the response IS the
+ * `payment_type` we send back on order creation; the inner record
+ * carries per-method caps and currency.
+ */
+interface RawMethodLimits {
+  payment_type?: string
+  currency?: string
+  fee_rate?: number
+  daily_limit?: number
+  single_min?: number
+  single_max?: number
 }
 
 interface RawLimits {
   global_min?: number
   global_max?: number
-  methods?: Record<string, { min?: number; max?: number }>
+  methods?: Record<string, RawMethodLimits>
+}
+
+/**
+ * Display labels for the payment types sub2api supports. Falls back to
+ * the raw key when admin enables a new method we don't have a label for
+ * yet (better than rendering nothing).
+ */
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  alipay: 'Alipay',
+  alipay_direct: 'Alipay',
+  wxpay: 'WeChat Pay',
+  wxpay_direct: 'WeChat Pay',
+  stripe: 'Stripe',
+  card: 'Card',
+  link: 'Link',
+  easypay: 'EasyPay',
+  airwallex: 'Airwallex',
 }
 
 interface RawOrdersList<T> {
@@ -160,23 +198,31 @@ function mapConfig(raw: RawConfig | null | undefined): PaymentConfig {
   }
 }
 
-function mapChannel(raw: RawChannel): PaymentChannel {
+function mapChannelFromLimits(paymentType: string, raw: RawMethodLimits): PaymentChannel {
   return {
-    id: raw.ID,
-    key: String(raw.ID),
-    name: raw.Name,
-    description: raw.Description,
-    enabled: (raw.Status ?? '').toLowerCase() === 'active',
-    group_ids: raw.GroupIDs ?? [],
+    key: paymentType,
+    name: PAYMENT_TYPE_LABELS[paymentType] ?? paymentType,
+    min_amount: raw.single_min ?? 0,
+    max_amount: raw.single_max ?? 0,
+    fee_rate: raw.fee_rate ?? 0,
+    currency: raw.currency || 'USD',
+    daily_limit: raw.daily_limit ?? 0,
+    enabled: true,
   }
 }
 
 function mapLimits(raw: RawLimits | null | undefined): PaymentLimits {
   const r = raw ?? {}
+  const methods: Record<string, { min?: number; max?: number }> = {}
+  if (r.methods) {
+    for (const [k, v] of Object.entries(r.methods)) {
+      methods[k] = { min: v.single_min, max: v.single_max }
+    }
+  }
   return {
     min_amount: r.global_min ?? 0,
     max_amount: r.global_max ?? 0,
-    methods: r.methods ?? {},
+    methods,
   }
 }
 
@@ -205,9 +251,9 @@ const MOCK_PLANS: PaymentPlan[] = [
 ]
 
 const MOCK_CHANNELS: PaymentChannel[] = [
-  { id: 1, key: 'alipay', name: 'Alipay', enabled: true },
-  { id: 2, key: 'wechat', name: 'WeChat Pay', enabled: true },
-  { id: 3, key: 'stripe', name: 'Stripe', enabled: true },
+  { key: 'alipay', name: 'Alipay', min_amount: 10, max_amount: 1000, fee_rate: 0, currency: 'CNY', daily_limit: 0, enabled: true },
+  { key: 'wxpay',  name: 'WeChat Pay', min_amount: 10, max_amount: 1000, fee_rate: 0, currency: 'CNY', daily_limit: 0, enabled: true },
+  { key: 'stripe', name: 'Stripe', min_amount: 10, max_amount: 1000, fee_rate: 0.02, currency: 'USD', daily_limit: 0, enabled: true },
 ]
 
 const MOCK_LIMITS: PaymentLimits = { min_amount: 10, max_amount: 1000, methods: {} }
@@ -226,11 +272,18 @@ export async function getPlans(): Promise<PaymentPlan[]> {
   return items.map((p) => ({ ...p }))
 }
 
+/**
+ * Payment methods the user can pick from. Backed by `/payment/limits` —
+ * its `methods` map is keyed by `payment_type` (alipay / wxpay / …),
+ * which is exactly the value `POST /payment/orders` requires under the
+ * `payment_type` field. (The older `/payment/channels` endpoint returns
+ * AI-routing channels — a different concept that doesn't belong here.)
+ */
 export async function getChannels(): Promise<PaymentChannel[]> {
   if (isMockMode()) { await delay(); return MOCK_CHANNELS.map((c) => ({ ...c })) }
-  const body = unwrap<RawChannel[] | { items?: RawChannel[] }>(await client.get('/payment/channels'))
-  const items = Array.isArray(body) ? body : body?.items ?? []
-  return items.map(mapChannel).filter((c) => c.enabled)
+  const raw = unwrap<RawLimits>(await client.get('/payment/limits'))
+  const methods = raw?.methods ?? {}
+  return Object.entries(methods).map(([type, limits]) => mapChannelFromLimits(type, limits))
 }
 
 export async function getLimits(): Promise<PaymentLimits> {
