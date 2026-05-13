@@ -289,6 +289,8 @@ export default {
     title: 'Top up or subscribe',
     disabledTitle: 'Payments are not enabled on this server',
     disabledBody: "The administrator hasn't enabled the payment system yet. Once enabled, you'll be able to top up balance and purchase subscriptions here. In the meantime, ask your administrator for a redeem code on the {redeem} page.",
+    notReadyTitle: 'No payment methods configured',
+    notReadyBody: "Payment is enabled but the administrator hasn't connected any provider (Alipay / WeChat / Stripe / …) yet, so there's no way to charge a card. Ask your administrator to add a provider instance, or grab a {redeem} code in the meantime.",
     tabs: {
       balance: 'Balance',
       subscriptions: 'Subscriptions',

@@ -33,7 +33,15 @@ const pollTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
 // ─── Computed ───────────────────────────────────────────────────────────────
 
-const paymentEnabled = computed(() => !!config.value?.enabled && channels.value.length > 0)
+// `enabled` here = the admin has flipped on the payment system at all.
+// `paymentReady` = enabled AND at least one provider instance is
+// configured (a method shows up in /payment/limits.methods). Splitting
+// these matters because a server with payment ON but zero instances
+// configured used to slip past the old `/payment/channels` check (it
+// returned AI-routing channels, a false positive). Now we say the
+// truthful thing instead of hiding the recharge form.
+const paymentEnabled = computed(() => !!config.value?.enabled)
+const paymentReady = computed(() => paymentEnabled.value && channels.value.length > 0)
 
 const presetAmounts = computed(() => {
   const base = [10, 20, 50, 100, 200, 500]
@@ -91,7 +99,7 @@ function onCustomAmount(val: string) {
 }
 
 async function handleProceedToPay() {
-  if (!paymentEnabled.value) {
+  if (!paymentReady.value) {
     toast.warning(t('purchase.toast.disabledWarn'))
     return
   }
@@ -188,7 +196,7 @@ async function handleCancelOrder() {
 }
 
 async function handleSelectPlan(plan: payment.PaymentPlan) {
-  if (!paymentEnabled.value) {
+  if (!paymentReady.value) {
     toast.warning(t('purchase.toast.disabledWarn'))
     return
   }
@@ -237,13 +245,27 @@ async function handleSelectPlan(plan: payment.PaymentPlan) {
       <h1 class="text-4xl sm:text-5xl font-display font-normal tracking-tight mt-3">{{ t('purchase.title') }}</h1>
     </div>
 
-    <!-- Disabled banner -->
+    <!-- Disabled banner — admin hasn't turned payment on at all -->
     <div
       v-if="!loading && !paymentEnabled"
       class="rounded-xl border border-dashed border-border bg-card p-6"
     >
       <p class="text-base font-medium text-fg">{{ t('purchase.disabledTitle') }}</p>
       <i18n-t keypath="purchase.disabledBody" tag="p" class="mt-2 text-sm text-muted-fg leading-relaxed">
+        <template #redeem>
+          <RouterLink to="/redeem" class="text-fg underline">{{ t('nav.items.redeem') }}</RouterLink>
+        </template>
+      </i18n-t>
+    </div>
+
+    <!-- Not-ready banner — payment is on but no provider instances are
+         configured, so /payment/limits returns an empty `methods` map. -->
+    <div
+      v-else-if="!loading && !paymentReady"
+      class="rounded-xl border border-dashed border-border bg-card p-6"
+    >
+      <p class="text-base font-medium text-fg">{{ t('purchase.notReadyTitle') }}</p>
+      <i18n-t keypath="purchase.notReadyBody" tag="p" class="mt-2 text-sm text-muted-fg leading-relaxed">
         <template #redeem>
           <RouterLink to="/redeem" class="text-fg underline">{{ t('nav.items.redeem') }}</RouterLink>
         </template>

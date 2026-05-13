@@ -282,6 +282,8 @@ export default {
     title: 'チャージまたはサブスク',
     disabledTitle: '本サーバーでは決済が無効です',
     disabledBody: '管理者が決済を有効化していません。有効化されれば、ここから残高チャージやサブスク購入が可能になります。それまでは管理者に {redeem} ページの引換コードを依頼してください。',
+    notReadyTitle: '決済方法が未設定です',
+    notReadyBody: '決済機能は有効ですが、管理者が決済プロバイダ（Alipay / WeChat / Stripe など）を一つも設定していないため、現時点では注文できません。プロバイダの追加を管理者に依頼するか、{redeem} の引換コードをご利用ください。',
     tabs: {
       balance: '残高',
       subscriptions: 'サブスク',

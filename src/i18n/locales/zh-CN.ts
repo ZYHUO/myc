@@ -282,6 +282,8 @@ export default {
     title: '充值或订阅',
     disabledTitle: '本服务未启用支付',
     disabledBody: '管理员还没启用支付。一旦启用，你就能在这里充值余额、购买订阅。期间请向管理员索取 {redeem} 兑换码。',
+    notReadyTitle: '尚未配置支付通道',
+    notReadyBody: '支付功能已启用，但管理员还没配置任何支付通道（支付宝 / 微信 / Stripe 等），暂时无法下单。请联系管理员添加支付通道，或先去 {redeem} 兑换。',
     tabs: {
       balance: '余额',
       subscriptions: '订阅',
