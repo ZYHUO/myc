@@ -138,6 +138,50 @@ export const useAuthStore = defineStore('auth', () => {
     return data.countdown ?? 60
   }
 
+  /**
+   * Step 1 of password recovery: ask sub2api to email a reset code to
+   * `email`. The endpoint accepts `turnstile_token` like /send-verify-code
+   * does so the same captcha widget can be reused. Returns the countdown
+   * (in seconds) the user must wait before requesting another code.
+   */
+  async function forgotPassword(email: string, turnstileToken?: string): Promise<number> {
+    if (isMockMode()) {
+      await delay(400)
+      return 60
+    }
+    const body: Record<string, string> = { email }
+    if (turnstileToken) body.turnstile_token = turnstileToken
+    const res = await client.post<unknown>('/auth/forgot-password', body)
+    const data = unwrap<{ countdown?: number }>(res)
+    return data.countdown ?? 60
+  }
+
+  /**
+   * Step 2 of password recovery: submit the verify code + new password.
+   * sub2api responds with a fresh token pair on success — same shape as a
+   * successful /auth/login, so we reuse applyLoginResponse to seat the
+   * user into pinia + localStorage.
+   */
+  async function resetPassword(payload: {
+    email: string
+    verifyCode: string
+    newPassword: string
+  }) {
+    if (isMockMode()) {
+      await delay(500)
+      const token = MOCK_TOKEN_PREFIX + Math.random().toString(36).slice(2)
+      localStorage.setItem('token', token)
+      user.value = { ...MOCK_USER, email: payload.email, username: payload.email.split('@')[0] }
+      return
+    }
+    const res = await client.post<unknown>('/auth/reset-password', {
+      email: payload.email,
+      verify_code: payload.verifyCode,
+      new_password: payload.newPassword,
+    })
+    applyLoginResponse(unwrap<LoginResponse>(res))
+  }
+
   async function logout() {
     user.value = null
     localStorage.removeItem('token')
@@ -186,5 +230,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, isAuthenticated, initialized, login, register, sendVerifyCode, logout, fetchUser }
+  return {
+    user, isAuthenticated, initialized,
+    login, register, sendVerifyCode, forgotPassword, resetPassword,
+    logout, fetchUser,
+  }
 })
