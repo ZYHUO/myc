@@ -132,24 +132,13 @@ function mapChannel(raw: UpstreamAvailableChannel): Channel {
 
 /**
  * Convert sub2api's `timeline` array into bars suitable for the StatusView.
+ * (see `synthesizeUptime30d` below for the deprecated fabrication path.)
  *
- * IMPORTANT: this function deliberately does NOT synthesise data. The
- * previous version (still callable as `synthesizeUptime30d` below for tests)
- * filled empty 30-day buckets via a deterministic pseudo-random function
- * keyed on the channel id + availability stat. That produced a slick-looking
- * Slack-style uptime strip where, in practice, most of the bars were
- * fiction — a channel with availability_7d=100 and one real check today
- * showed 30 green bars, with 29 of them invented. Misleading.
- *
- * What this returns instead:
- *   - Exactly the real timeline points sub2api gave us, oldest first.
- *   - If sub2api returned > MAX_BARS points, we take an evenly-spaced
- *     sample so the strip stays readable.
- *   - `[]` when there's no timeline data at all (the UI should show an
- *     empty state, not invent bars).
+ * Returns exactly one bar per real timeline point. We DON'T downsample — at
+ * 60 ms/bar a 1-hour timeline with per-minute checks renders 60 thin bars,
+ * which a flex container shrinks fluidly. Downsampling caused a worse bug:
+ * the "60 checks" caption disagreed with the visible bar count.
  */
-const MAX_BARS = 30
-
 function mapTimelineStatus(s: string | undefined): 'up' | 'down' | 'degraded' {
   if (!s) return 'down'
   if (s === 'operational' || s === 'healthy' || s === 'up' || s === 'ok') return 'up'
@@ -159,27 +148,17 @@ function mapTimelineStatus(s: string | undefined): 'up' | 'down' | 'degraded' {
 
 export function buildUptimeBars(timeline: UpstreamTimelinePoint[] | undefined): ('up' | 'down' | 'degraded')[] {
   if (!timeline || timeline.length === 0) return []
-  // sub2api emits the newest point last; sort defensively in case of fork
-  // deployments that reverse the order.
-  const sorted = [...timeline]
+  return [...timeline]
     .filter((p) => !!p.checked_at)
     .sort((a, b) => (a.checked_at! < b.checked_at! ? -1 : 1))
-  if (sorted.length <= MAX_BARS) {
-    return sorted.map((p) => mapTimelineStatus(p.status))
-  }
-  // Down-sample to MAX_BARS bars, preserving newest at the right edge.
-  const stride = sorted.length / MAX_BARS
-  const out: ('up' | 'down' | 'degraded')[] = []
-  for (let i = 0; i < MAX_BARS; i++) {
-    out.push(mapTimelineStatus(sorted[Math.floor(i * stride)].status))
-  }
-  return out
+    .map((p) => mapTimelineStatus(p.status))
 }
 
 /**
- * Format a "10 checks · last 6m" caption from the timeline metadata. We do
- * it in TS rather than i18n templating because the duration unit is
- * computed at runtime (m / h / d).
+ * Compose the caption under the uptime strip from real metadata. We
+ * intentionally express the time window as a DURATION (`60 分钟`, not
+ * `60 分钟前`) — the `timeAgo` strings are for "X minutes ago" timestamps
+ * and read awkwardly when paired with the "最近" prefix in the template.
  */
 function buildSpanLabel(
   timeline: UpstreamTimelinePoint[] | undefined,
@@ -193,13 +172,19 @@ function buildSpanLabel(
     .sort((a, b) => a - b)
   if (stamps.length === 0) return t('status.noChecks')
 
-  const spanMs = now - stamps[0]
-  let timeAgo: string
-  if (spanMs < 60 * 60_000) timeAgo = t('common.timeAgo.minute', { n: Math.max(1, Math.round(spanMs / 60_000)) })
-  else if (spanMs < 24 * 60 * 60_000) timeAgo = t('common.timeAgo.hour', { n: Math.max(1, Math.round(spanMs / (60 * 60_000))) })
-  else timeAgo = t('common.timeAgo.day', { n: Math.max(1, Math.round(spanMs / (24 * 60 * 60_000))) })
-
-  return t('status.spanLabel', { n: timeline.length, span: timeAgo })
+  // Span = from the OLDEST point to the LATEST point (not "since first
+  // point until now") — that way we describe what the bars actually cover,
+  // not how stale the data is.
+  const spanMs = stamps[stamps.length - 1] - stamps[0]
+  let durationStr: string
+  if (spanMs < 60 * 60_000) {
+    durationStr = t('common.duration.minutes', { n: Math.max(1, Math.round(spanMs / 60_000)) })
+  } else if (spanMs < 24 * 60 * 60_000) {
+    durationStr = t('common.duration.hours', { n: Math.max(1, Math.round(spanMs / (60 * 60_000))) })
+  } else {
+    durationStr = t('common.duration.days', { n: Math.max(1, Math.round(spanMs / (24 * 60 * 60_000))) })
+  }
+  return t('status.spanLabel', { n: stamps.length, span: durationStr })
 }
 
 /**

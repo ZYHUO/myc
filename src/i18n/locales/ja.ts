@@ -67,6 +67,12 @@ export default {
       hour: '{n}時間前',
       day: '{n}日前',
     },
+    // 期間（「前」なし）— 「直近 N 分」のような区間表現用
+    duration: {
+      minutes: '{n} 分間',
+      hours: '{n} 時間',
+      days: '{n} 日間',
+    },
     loadFailed: '読み込みに失敗しました',
     noData: 'データがありません',
     confirmDeleteTitle: '削除の確認',

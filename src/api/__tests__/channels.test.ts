@@ -189,12 +189,17 @@ describe('buildUptimeBars', () => {
     expect(out).toEqual(['up', 'degraded', 'down'])
   })
 
-  it('down-samples to at most 30 entries when the timeline is huge', () => {
+  it('renders one bar per real timeline point — no downsampling', () => {
+    // sub2api typically keeps ~60 timeline points (one per minute for the
+    // last hour). We deliberately render all of them so the bar count
+    // matches the "N checks" caption. Bug regression: an earlier
+    // MAX_BARS=30 cap caused the displayed bars to disagree with the
+    // numeric caption.
     const hundred = Array.from({ length: 100 }, (_, i) =>
       at(`2026-05-12T${String(10 + Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00Z`),
     )
     const out = buildUptimeBars(hundred)
-    expect(out.length).toBe(30)
+    expect(out.length).toBe(100)
     expect(out.every((s) => s === 'up')).toBe(true)
   })
 

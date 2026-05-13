@@ -67,6 +67,12 @@ export default {
       hour: '{n} 小时前',
       day: '{n} 天前',
     },
+    // 时长（不带"前"）— 用于描述"最近 N 分钟"这种区间，不是过去事件
+    duration: {
+      minutes: '{n} 分钟',
+      hours: '{n} 小时',
+      days: '{n} 天',
+    },
     loadFailed: '加载失败',
     noData: '暂无数据',
     confirmDeleteTitle: '确认删除',

@@ -70,6 +70,13 @@ export default {
       hour: '{n}h ago',
       day: '{n}d ago',
     },
+    // Duration strings — pure spans, no "ago" suffix. Used by anything that
+    // describes "the last N hours" rather than "an event N hours ago".
+    duration: {
+      minutes: '{n} min',
+      hours: '{n} hr',
+      days: '{n} days',
+    },
     loadFailed: 'Failed to load',
     noData: 'No data',
     confirmDeleteTitle: 'Confirm deletion',
