@@ -272,6 +272,8 @@ export default {
     expires: '期限: {date}',
     expired: '期限切れ: {date}',
     started: '開始: {date}',
+    resetsIn: '{duration}後にリセット',
+    resetsLtMinute: 'まもなくリセット',
     loadFailed: 'サブスクの読み込みに失敗しました',
   },
 
@@ -454,7 +456,7 @@ export default {
       bind: '連携',
       unbind: '解除',
       unbindTitle: '{provider} を解除しますか？',
-      unbindMsg: '解除すると、再度連携するまでこのアカウントでサインインできなくなります。',
+      unbindMsg: 'セキュリティ上、解除と同時にサインアウトされます。再度連携するまでこのアカウントでサインインできません。',
       providers: {
         email: 'メール',
         github: 'GitHub',
@@ -665,6 +667,7 @@ export default {
       noAccount: 'Amodel は初めてですか？',
       register: 'アカウントを作成',
       forgotPassword: 'パスワードをお忘れ？',
+      orContinue: '別の方法でサインイン',
       mockHint: 'Mock モードでは任意のメール / パスワードで入れます。VITE_USE_MOCK=false で本番に切替。',
       emailRequired: 'メールとパスワードを入力してください',
       success: 'おかえりなさい',

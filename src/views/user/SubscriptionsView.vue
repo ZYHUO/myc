@@ -72,6 +72,35 @@ function progressColor(percent: number): string {
   if (percent >= 70) return 'var(--warning, #e5a500)'
   return 'var(--primary)'
 }
+
+/**
+ * Render "resets in 3h 12m" / "resets in 2d 4h" / "less than a minute".
+ * `resets_in_seconds` only ships when `/subscriptions/progress` is wired
+ * upstream; the bare list endpoint leaves it undefined and the caption
+ * is suppressed.
+ */
+function resetCaption(seconds: number | undefined): string {
+  if (typeof seconds !== 'number' || seconds < 0) return ''
+  const m = Math.floor(seconds / 60)
+  // Backend clamps `resets_in_seconds` to 0 right at the window edge;
+  // show "Resets in under a minute" rather than vanishing the caption.
+  if (m < 1) return t('subscriptions.resetsLtMinute')
+  if (m < 60) return t('subscriptions.resetsIn', { duration: t('common.duration.minutes', { n: m }) })
+  const h = Math.floor(m / 60)
+  if (h < 24) {
+    const remMin = m % 60
+    const duration = remMin > 0
+      ? `${t('common.duration.hours', { n: h })} ${t('common.duration.minutes', { n: remMin })}`
+      : t('common.duration.hours', { n: h })
+    return t('subscriptions.resetsIn', { duration })
+  }
+  const d = Math.floor(h / 24)
+  const remHour = h % 24
+  const duration = remHour > 0
+    ? `${t('common.duration.days', { n: d })} ${t('common.duration.hours', { n: remHour })}`
+    : t('common.duration.days', { n: d })
+  return t('subscriptions.resetsIn', { duration })
+}
 </script>
 
 <template>
@@ -141,10 +170,13 @@ function progressColor(percent: number): string {
                   <template v-else> / ∞</template>
                 </span>
               </div>
-              <UiProgressBar 
-                :value="sub.daily_limit_usd > 0 ? usagePercent(sub.daily_usage_usd, sub.daily_limit_usd) : 0" 
+              <UiProgressBar
+                :value="sub.daily_limit_usd > 0 ? usagePercent(sub.daily_usage_usd, sub.daily_limit_usd) : 0"
                 :style="{ '--progress-color': progressColor(usagePercent(sub.daily_usage_usd, sub.daily_limit_usd)) }"
               />
+              <p v-if="sub.progress?.daily && resetCaption(sub.progress.daily.resets_in_seconds)" class="text-[10px] text-muted-fg">
+                {{ resetCaption(sub.progress.daily.resets_in_seconds) }}
+              </p>
             </div>
 
             <!-- Weekly -->
@@ -157,10 +189,13 @@ function progressColor(percent: number): string {
                   <template v-else> / ∞</template>
                 </span>
               </div>
-              <UiProgressBar 
+              <UiProgressBar
                 :value="sub.weekly_limit_usd > 0 ? usagePercent(sub.weekly_usage_usd, sub.weekly_limit_usd) : 0"
                 :style="{ '--progress-color': progressColor(usagePercent(sub.weekly_usage_usd, sub.weekly_limit_usd)) }"
               />
+              <p v-if="sub.progress?.weekly && resetCaption(sub.progress.weekly.resets_in_seconds)" class="text-[10px] text-muted-fg">
+                {{ resetCaption(sub.progress.weekly.resets_in_seconds) }}
+              </p>
             </div>
 
             <!-- Monthly -->
@@ -173,10 +208,13 @@ function progressColor(percent: number): string {
                   <template v-else> / ∞</template>
                 </span>
               </div>
-              <UiProgressBar 
+              <UiProgressBar
                 :value="sub.monthly_limit_usd > 0 ? usagePercent(sub.monthly_usage_usd, sub.monthly_limit_usd) : 0"
                 :style="{ '--progress-color': progressColor(usagePercent(sub.monthly_usage_usd, sub.monthly_limit_usd)) }"
               />
+              <p v-if="sub.progress?.monthly && resetCaption(sub.progress.monthly.resets_in_seconds)" class="text-[10px] text-muted-fg">
+                {{ resetCaption(sub.progress.monthly.resets_in_seconds) }}
+              </p>
             </div>
           </div>
 

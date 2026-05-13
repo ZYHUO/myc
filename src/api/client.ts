@@ -1,5 +1,12 @@
 import axios from 'axios'
 import router from '@/router'
+// Static import works despite the apparent cycle (stores/auth → client →
+// stores/auth) because `useAuthStore` is only INVOKED inside the response
+// interceptor — long after both modules finish evaluating. ES module live
+// bindings handle the rest. The old dynamic import was flagged
+// "INEFFECTIVE_DYNAMIC_IMPORT" by rolldown since stores/auth is already
+// in the main chunk anyway.
+import { useAuthStore } from '@/stores/auth'
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -23,10 +30,7 @@ client.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('refresh_token')
-      // Lazy-load the auth store to avoid a circular import — stores/auth.ts
-      // imports THIS file, so a static import would deadlock during boot.
       try {
-        const { useAuthStore } = await import('@/stores/auth')
         useAuthStore().user = null
       } catch {
         // Pinia not initialised yet (very early boot); localStorage clearing

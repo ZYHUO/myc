@@ -151,18 +151,36 @@ async function handleBind(b: IdentityBinding) {
     }
     const ok = await confirm({
       title: t('profile.bindings.unbindTitle', { provider: providerLabel(b.provider) }),
+      // sub2api revokes all access tokens after a successful unbind for
+      // security, so the user gets signed out as a side effect. Make
+      // that explicit in the confirm copy so it doesn't feel like a bug.
       message: t('profile.bindings.unbindMsg'),
       variant: 'danger',
     })
     if (!ok) return
-    // Unbind goes through a provider-specific endpoint that's not always
-    // mounted; show a friendly "ask your admin" toast if it 404s.
+    // DELETE /user/account-bindings/{provider} — single route for every
+    // provider (email/github/google/linuxdo/wechat/oidc). The backend
+    // refuses to unlink the last remaining sign-in method, so
+    // `can_unbind` should already be false in that case.
     try {
       await import('@/api/client').then(({ default: c }) =>
-        c.delete(`/auth/oauth/${b.provider}/bind`),
+        c.delete(`/user/account-bindings/${encodeURIComponent(b.provider)}`),
       )
-      await loadProfile()
+      // The token is now invalid server-side. Mark the binding off
+      // locally for the brief window before we navigate, then sign out
+      // cleanly so the user isn't bounced through a 401 mid-toast.
+      if (profile.value?.identities?.[b.provider]) {
+        profile.value.identities[b.provider] = {
+          ...profile.value.identities[b.provider],
+          bound: false,
+          bound_count: 0,
+          subject_hint: undefined,
+          can_unbind: false,
+          can_bind: true,
+        }
+      }
       toast.success(t('profile.toast.unbindOk'))
+      await auth.logout()
     } catch (e) {
       const data = (e as { response?: { data?: { message?: string } } }).response?.data
       toast.error(data?.message || t('profile.toast.unbindFail'))

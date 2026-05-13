@@ -272,6 +272,8 @@ export default {
     expires: '到期：{date}',
     expired: '过期：{date}',
     started: '开始：{date}',
+    resetsIn: '{duration} 后重置',
+    resetsLtMinute: '即将重置',
     loadFailed: '加载订阅失败',
   },
 
@@ -454,7 +456,7 @@ export default {
       bind: '绑定',
       unbind: '解绑',
       unbindTitle: '解绑 {provider}？',
-      unbindMsg: '解绑后你将无法再使用该账号登录，除非重新绑定。',
+      unbindMsg: '出于安全考虑，解绑会同时退出当前登录，重新绑定后才能用该账号登录。',
       providers: {
         email: '邮箱',
         github: 'GitHub',
@@ -665,6 +667,7 @@ export default {
       noAccount: '还没有账号？',
       register: '创建账号',
       forgotPassword: '忘记密码？',
+      orContinue: '或使用以下方式登录',
       mockHint: 'Mock 模式下任意非空邮箱和密码均可登录。设置 VITE_USE_MOCK=false 切到真后端。',
       emailRequired: '请输入邮箱和密码',
       success: '欢迎回来',

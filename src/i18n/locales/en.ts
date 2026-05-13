@@ -279,6 +279,8 @@ export default {
     expires: 'Expires {date}',
     expired: 'Expired {date}',
     started: 'Started {date}',
+    resetsIn: 'Resets in {duration}',
+    resetsLtMinute: 'Resets in under a minute',
     loadFailed: 'Failed to load subscriptions',
   },
 
@@ -461,7 +463,7 @@ export default {
       bind: 'Link',
       unbind: 'Unlink',
       unbindTitle: 'Unlink {provider}?',
-      unbindMsg: "You'll need to relink this account to sign in with it again.",
+      unbindMsg: "You'll be signed out as part of the unlink, and you'll need to relink this account to sign in with it again.",
       providers: {
         email: 'Email',
         github: 'GitHub',
@@ -678,6 +680,7 @@ export default {
       noAccount: 'New to Amodel?',
       register: 'Create an account',
       forgotPassword: 'Forgot password?',
+      orContinue: 'or continue with',
       mockHint: 'Any non-empty email and password are accepted. Set VITE_USE_MOCK=false to use the real backend.',
       emailRequired: 'Please enter both email and password',
       success: 'Welcome back',
