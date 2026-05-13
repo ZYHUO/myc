@@ -22,8 +22,18 @@ import { useThemeStore } from '@/stores/theme'
 const props = defineProps<{
   /** Public captcha ID issued by Geetest. Empty disables rendering. */
   captchaId: string
-  /** 'popup' (default — opens above the trigger), 'bind', or 'float'. */
-  product?: 'popup' | 'bind' | 'float'
+  /**
+   * Geetest v4 product type:
+   *   - 'popup'   → renders a "click to verify" button inline; the slider
+   *                 opens in an overlay on click. Right default for an
+   *                 auth-form context (visible affordance, no full-page
+   *                 takeover).
+   *   - 'float'   → floating button anchored bottom-right of the viewport
+   *   - 'bind'    → no UI; you call `showCaptcha()` from your own button.
+   *                 Useless as a default — the widget renders nothing.
+   *   - 'custom'  → fully custom DOM, advanced.
+   */
+  product?: 'popup' | 'float' | 'bind' | 'custom'
 }>()
 
 const emit = defineEmits<{
@@ -106,7 +116,7 @@ function render() {
   window.initGeetest4(
     {
       captchaId: props.captchaId,
-      product: props.product || 'bind',
+      product: props.product || 'popup',
       language: detectLanguage(),
     },
     (captcha) => {
@@ -136,12 +146,15 @@ function render() {
 }
 
 function detectLanguage(): string {
-  // Geetest expects 'zh', 'zho-tw', 'eng', 'jpn', etc. Map our app locales.
-  // Best-effort — unknown locales fall back to English.
+  // Geetest v4 language tags: 'eng', 'zho-cn' (simplified), 'zho-tw',
+  // 'zho-hk', 'jpn', 'kor', 'rus', etc. Plain 'zho' is not a valid v4
+  // tag — it silently falls back to English. Best-effort; unknown
+  // locales fall back to English.
   if (typeof navigator === 'undefined') return 'eng'
   const tag = (navigator.language || 'en').toLowerCase()
-  if (tag.startsWith('zh-tw') || tag.startsWith('zh-hk')) return 'zho-tw'
-  if (tag.startsWith('zh')) return 'zho'
+  if (tag.startsWith('zh-tw')) return 'zho-tw'
+  if (tag.startsWith('zh-hk')) return 'zho-hk'
+  if (tag.startsWith('zh')) return 'zho-cn'
   if (tag.startsWith('ja')) return 'jpn'
   if (tag.startsWith('ko')) return 'kor'
   if (tag.startsWith('ru')) return 'rus'

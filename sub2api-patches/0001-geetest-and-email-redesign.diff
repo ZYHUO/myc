@@ -34,7 +34,7 @@ index a550118..950d548 100644
  	redeemCache := repository.NewRedeemCache(redisClient)
  	redeemService := service.NewRedeemService(redeemCodeRepository, userRepository, subscriptionService, redeemCache, billingCacheService, client, apiKeyAuthCacheInvalidator, affiliateService)
 diff --git a/backend/internal/handler/admin/setting_handler.go b/backend/internal/handler/admin/setting_handler.go
-index 0ea664d..b6807bb 100644
+index 0ea664d..3a78c6e 100644
 --- a/backend/internal/handler/admin/setting_handler.go
 +++ b/backend/internal/handler/admin/setting_handler.go
 @@ -131,6 +131,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
@@ -91,8 +91,34 @@ index 0ea664d..b6807bb 100644
  		LinuxDoConnectEnabled:            req.LinuxDoConnectEnabled,
  		LinuxDoConnectClientID:           req.LinuxDoConnectClientID,
  		LinuxDoConnectClientSecret:       req.LinuxDoConnectClientSecret,
+@@ -1678,6 +1704,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
+ 		TurnstileEnabled:                       updatedSettings.TurnstileEnabled,
+ 		TurnstileSiteKey:                       updatedSettings.TurnstileSiteKey,
+ 		TurnstileSecretKeyConfigured:           updatedSettings.TurnstileSecretKeyConfigured,
++		GeetestEnabled:                         updatedSettings.GeetestEnabled,
++		GeetestCaptchaID:                       updatedSettings.GeetestCaptchaID,
++		GeetestCaptchaKeyConfigured:            updatedSettings.GeetestCaptchaKeyConfigured,
+ 		LinuxDoConnectEnabled:                  updatedSettings.LinuxDoConnectEnabled,
+ 		LinuxDoConnectClientID:                 updatedSettings.LinuxDoConnectClientID,
+ 		LinuxDoConnectClientSecretConfigured:   updatedSettings.LinuxDoConnectClientSecretConfigured,
+@@ -1923,6 +1952,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
+ 	if req.TurnstileSecretKey != "" {
+ 		changed = append(changed, "turnstile_secret_key")
+ 	}
++	if before.GeetestEnabled != after.GeetestEnabled {
++		changed = append(changed, "geetest_enabled")
++	}
++	if before.GeetestCaptchaID != after.GeetestCaptchaID {
++		changed = append(changed, "geetest_captcha_id")
++	}
++	if req.GeetestCaptchaKey != "" {
++		changed = append(changed, "geetest_captcha_key")
++	}
+ 	if before.LinuxDoConnectEnabled != after.LinuxDoConnectEnabled {
+ 		changed = append(changed, "linuxdo_connect_enabled")
+ 	}
 diff --git a/backend/internal/handler/auth_handler.go b/backend/internal/handler/auth_handler.go
-index 1f9a66f..a82fd72 100644
+index 1f9a66f..b86cf0f 100644
 --- a/backend/internal/handler/auth_handler.go
 +++ b/backend/internal/handler/auth_handler.go
 @@ -46,6 +46,10 @@ type RegisterRequest struct {
@@ -122,57 +148,42 @@ index 1f9a66f..a82fd72 100644
  }
  
  // AuthResponse 认证响应格式（匹配前端期望）
-@@ -159,8 +165,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
+@@ -159,8 +165,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
  		return
  	}
  
 -	// Turnstile 验证（邮箱验证码注册场景避免重复校验一次性 token）
 -	if err := h.authService.VerifyTurnstileForRegister(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c), req.VerifyCode); err != nil {
-+	// CAPTCHA 验证：Turnstile 和 Geetest 是平级的备选 — 各自只在启用时
-+	// 才校验对应 token，因此可以无条件双调用；如果两者都开启，则两个 token
-+	// 都必须有效才能通过（admin 默认是二选一的策略，但代码支持共存）。
-+	clientIP := ip.GetClientIP(c)
-+	if err := h.authService.VerifyTurnstileForRegister(c.Request.Context(), req.TurnstileToken, clientIP, req.VerifyCode); err != nil {
-+		response.ErrorFrom(c, err)
-+		return
-+	}
-+	if err := h.authService.VerifyGeetestForRegister(c.Request.Context(), req.GeetestToken, clientIP, req.VerifyCode); err != nil {
++	// CAPTCHA 验证：Turnstile 和 Geetest 是平级的备选。VerifyCaptcha 内部
++	// 做的是 OR 语义 — 任一启用的 provider 通过即放行，避免管理员两者都开
++	// 启时前端只渲染一种导致每次提交 400。
++	if err := h.authService.VerifyCaptchaForRegister(c.Request.Context(), req.TurnstileToken, req.GeetestToken, ip.GetClientIP(c), req.VerifyCode); err != nil {
  		response.ErrorFrom(c, err)
  		return
  	}
-@@ -191,8 +204,13 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
+@@ -191,8 +199,8 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
  		return
  	}
  
 -	// Turnstile 验证
 -	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
-+	// CAPTCHA 验证（Turnstile / Geetest 任一或两者）
-+	clientIP := ip.GetClientIP(c)
-+	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, clientIP); err != nil {
-+		response.ErrorFrom(c, err)
-+		return
-+	}
-+	if err := h.authService.VerifyGeetest(c.Request.Context(), req.GeetestToken, clientIP); err != nil {
++	// CAPTCHA 验证（Turnstile / Geetest OR 语义）
++	if err := h.authService.VerifyCaptcha(c.Request.Context(), req.TurnstileToken, req.GeetestToken, ip.GetClientIP(c)); err != nil {
  		response.ErrorFrom(c, err)
  		return
  	}
-@@ -218,8 +236,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
+@@ -218,8 +226,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
  		return
  	}
  
 -	// Turnstile 验证
 -	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
-+	// CAPTCHA 验证（Turnstile / Geetest 任一或两者）
-+	clientIP := ip.GetClientIP(c)
-+	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, clientIP); err != nil {
-+		response.ErrorFrom(c, err)
-+		return
-+	}
-+	if err := h.authService.VerifyGeetest(c.Request.Context(), req.GeetestToken, clientIP); err != nil {
++	// CAPTCHA 验证（Turnstile / Geetest OR 语义）
++	if err := h.authService.VerifyCaptcha(c.Request.Context(), req.TurnstileToken, req.GeetestToken, ip.GetClientIP(c)); err != nil {
  		response.ErrorFrom(c, err)
  		return
  	}
-@@ -565,6 +588,7 @@ func (h *AuthHandler) ValidateInvitationCode(c *gin.Context) {
+@@ -565,6 +573,7 @@ func (h *AuthHandler) ValidateInvitationCode(c *gin.Context) {
  type ForgotPasswordRequest struct {
  	Email          string `json:"email" binding:"required,email"`
  	TurnstileToken string `json:"turnstile_token"`
@@ -180,19 +191,14 @@ index 1f9a66f..a82fd72 100644
  }
  
  // ForgotPasswordResponse 忘记密码响应
-@@ -581,8 +605,13 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+@@ -581,8 +590,8 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
  		return
  	}
  
 -	// Turnstile 验证
 -	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
-+	// CAPTCHA 验证（Turnstile / Geetest 任一或两者）
-+	clientIP := ip.GetClientIP(c)
-+	if err := h.authService.VerifyGeetest(c.Request.Context(), req.GeetestToken, clientIP); err != nil {
-+		response.ErrorFrom(c, err)
-+		return
-+	}
-+	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, clientIP); err != nil {
++	// CAPTCHA 验证（Turnstile / Geetest OR 语义）
++	if err := h.authService.VerifyCaptcha(c.Request.Context(), req.TurnstileToken, req.GeetestToken, ip.GetClientIP(c)); err != nil {
  		response.ErrorFrom(c, err)
  		return
  	}
@@ -234,16 +240,16 @@ index b3c7786..e291b7e 100644
  
  	return &AuthHandler{
 diff --git a/backend/internal/handler/dto/settings.go b/backend/internal/handler/dto/settings.go
-index 551cf0d..fdd8cd7 100644
+index 551cf0d..8051aa6 100644
 --- a/backend/internal/handler/dto/settings.go
 +++ b/backend/internal/handler/dto/settings.go
 @@ -51,6 +51,10 @@ type SystemSettings struct {
  	TurnstileSiteKey             string `json:"turnstile_site_key"`
  	TurnstileSecretKeyConfigured bool   `json:"turnstile_secret_key_configured"`
  
-+	GeetestEnabled             bool   `json:"geetest_enabled"`
-+	GeetestCaptchaID           string `json:"geetest_captcha_id"`
-+	GeetestCaptchaKeyConfigured bool  `json:"geetest_captcha_key_configured"`
++	GeetestEnabled              bool   `json:"geetest_enabled"`
++	GeetestCaptchaID            string `json:"geetest_captcha_id"`
++	GeetestCaptchaKeyConfigured bool   `json:"geetest_captcha_key_configured"`
 +
  	LinuxDoConnectEnabled                bool   `json:"linuxdo_connect_enabled"`
  	LinuxDoConnectClientID               string `json:"linuxdo_connect_client_id"`
@@ -444,8 +450,22 @@ index a643d3b..e9922e5 100644
  	userSvc := service.NewUserService(userRepo, nil, nil, nil)
  	toucher := &recordingActivityToucher{}
  
+diff --git a/backend/internal/service/auth_oauth_email_flow_test.go b/backend/internal/service/auth_oauth_email_flow_test.go
+index cd76c6b..a8085ee 100644
+--- a/backend/internal/service/auth_oauth_email_flow_test.go
++++ b/backend/internal/service/auth_oauth_email_flow_test.go
+@@ -133,7 +133,8 @@ func newOAuthEmailFlowAuthService(
+ 		cfg,
+ 		settingService,
+ 		emailService,
+-		nil,
++		nil, // turnstileService
++		nil, // geetestService
+ 		nil,
+ 		nil,
+ 		nil,
 diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
-index e01e821..5f581d1 100644
+index e01e821..7fb4a7e 100644
 --- a/backend/internal/service/auth_service.go
 +++ b/backend/internal/service/auth_service.go
 @@ -70,6 +70,7 @@ type AuthService struct {
@@ -472,7 +492,7 @@ index e01e821..5f581d1 100644
  		emailQueueService:  emailQueueService,
  		promoService:       promoService,
  		affiliateService:   affiliateService,
-@@ -414,6 +417,38 @@ func (s *AuthService) IsTurnstileEnabled(ctx context.Context) bool {
+@@ -414,6 +417,101 @@ func (s *AuthService) IsTurnstileEnabled(ctx context.Context) bool {
  	return s.turnstileService.IsEnabled(ctx)
  }
  
@@ -506,6 +526,69 @@ index e01e821..5f581d1 100644
 +		return false
 +	}
 +	return s.geetestService.IsEnabled(ctx)
++}
++
++// VerifyCaptcha validates whichever of Turnstile / Geetest the client
++// supplied. When NEITHER is enabled, returns nil (no captcha required).
++// When AT LEAST ONE is enabled, at least one supplied token must pass —
++// it's an OR, not an AND. This matches what the SPA actually does (one
++// widget on screen at a time even when admin has both enabled), and
++// keeps the UX sane: the user doesn't have to solve two challenges.
++//
++// Edge cases:
++//   - All providers off                       → pass
++//   - Geetest on, token valid                 → pass
++//   - Geetest on, token empty/invalid;
++//     Turnstile on, token valid               → pass
++//   - All enabled providers got empty/bad
++//     tokens                                  → return last verifier error
++//
++// Returns the most informative error from the failing verifier so the
++// frontend can surface a precise message.
++func (s *AuthService) VerifyCaptcha(ctx context.Context, turnstileToken, geetestToken, remoteIP string) error {
++	turnstileOn := s.IsTurnstileEnabled(ctx)
++	geetestOn := s.IsGeetestEnabled(ctx)
++	if !turnstileOn && !geetestOn {
++		return nil
++	}
++
++	var lastErr error
++	// Try Geetest first when present, since the SPA prefers it when both
++	// are enabled. A successful pass short-circuits the OR.
++	if geetestOn && geetestToken != "" {
++		if err := s.VerifyGeetest(ctx, geetestToken, remoteIP); err == nil {
++			return nil
++		} else {
++			lastErr = err
++		}
++	}
++	if turnstileOn && turnstileToken != "" {
++		if err := s.VerifyTurnstile(ctx, turnstileToken, remoteIP); err == nil {
++			return nil
++		} else {
++			lastErr = err
++		}
++	}
++	if lastErr != nil {
++		return lastErr
++	}
++	// No tokens supplied at all but at least one provider is enabled.
++	// Prefer Geetest's error class when Geetest is the active provider,
++	// Turnstile's otherwise — matches what the frontend was showing.
++	if geetestOn {
++		return ErrGeetestVerificationFailed
++	}
++	return ErrTurnstileVerificationFailed
++}
++
++// VerifyCaptchaForRegister mirrors VerifyCaptcha but skips re-validation
++// during the register-with-verify-code flow (the captcha token was burned
++// at send-code time).
++func (s *AuthService) VerifyCaptchaForRegister(ctx context.Context, turnstileToken, geetestToken, remoteIP, verifyCode string) error {
++	if s.IsEmailVerifyEnabled(ctx) && strings.TrimSpace(verifyCode) != "" {
++		return nil
++	}
++	return s.VerifyCaptcha(ctx, turnstileToken, geetestToken, remoteIP)
 +}
 +
  // IsRegistrationEnabled 检查是否开放注册
@@ -546,6 +629,34 @@ index 53048b9..c7f37b3 100644
  	return svc, repo, client
  }
  
+diff --git a/backend/internal/service/auth_service_register_test.go b/backend/internal/service/auth_service_register_test.go
+index acc44a3..b0520e7 100644
+--- a/backend/internal/service/auth_service_register_test.go
++++ b/backend/internal/service/auth_service_register_test.go
+@@ -208,8 +208,9 @@ func newAuthService(repo *userRepoStub, settings map[string]string, emailCache E
+ 		cfg,
+ 		settingService,
+ 		emailService,
+-		nil,
+-		nil,
++		nil, // turnstileService
++		nil, // geetestService
++		nil, // emailQueueService
+ 		nil, // promoService
+ 		nil, // defaultSubAssigner
+ 		nil, // affiliateService
+diff --git a/backend/internal/service/auth_service_turnstile_register_test.go b/backend/internal/service/auth_service_turnstile_register_test.go
+index 3512822..dcc01d9 100644
+--- a/backend/internal/service/auth_service_turnstile_register_test.go
++++ b/backend/internal/service/auth_service_turnstile_register_test.go
+@@ -51,6 +51,7 @@ func newAuthServiceForRegisterTurnstileTest(settings map[string]string, verifier
+ 		settingService,
+ 		nil, // emailService
+ 		turnstileService,
++		nil, // geetestService
+ 		nil, // emailQueueService
+ 		nil, // promoService
+ 		nil, // defaultSubAssigner
 diff --git a/backend/internal/service/domain_constants.go b/backend/internal/service/domain_constants.go
 index 17c40ba..b792e37 100644
 --- a/backend/internal/service/domain_constants.go
@@ -991,16 +1102,16 @@ index 86978ee..ff78051 100644
  func (s *SettingService) IsIdentityPatchEnabled(ctx context.Context) bool {
  	value, err := s.settingRepo.GetValue(ctx, SettingKeyEnableIdentityPatch)
 diff --git a/backend/internal/service/settings_view.go b/backend/internal/service/settings_view.go
-index bfe8599..aecd3b6 100644
+index bfe8599..b3a68e2 100644
 --- a/backend/internal/service/settings_view.go
 +++ b/backend/internal/service/settings_view.go
 @@ -39,6 +39,11 @@ type SystemSettings struct {
  	TurnstileSecretKey           string
  	TurnstileSecretKeyConfigured bool
  
-+	GeetestEnabled            bool
-+	GeetestCaptchaID          string
-+	GeetestCaptchaKey         string
++	GeetestEnabled              bool
++	GeetestCaptchaID            string
++	GeetestCaptchaKey           string
 +	GeetestCaptchaKeyConfigured bool
 +
  	// LinuxDo Connect OAuth 登录
