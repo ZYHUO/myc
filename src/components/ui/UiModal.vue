@@ -75,28 +75,49 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <Transition name="modal">
+      <!--
+        Outer wrapper. The padding here is what keeps the dialog away from
+        the viewport edge on tablets/desktop. On mobile we drop the padding
+        to 0 so the dialog can fill the screen edge-to-edge.
+
+        Flex column + items-stretch makes the dialog grow to the available
+        height. Combined with `max-height: 100dvh` (dvh = dynamic viewport
+        height, accounts for mobile browser chrome) the dialog can never
+        be taller than the screen.
+
+        `overscroll-behavior: contain` stops a body-bounce / pull-to-refresh
+        from leaking through when the user reaches the top or bottom of the
+        scrolling content inside the dialog.
+      -->
       <div
         v-if="model"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        class="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4"
         @click.self="onBackdrop"
       >
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="onBackdrop" />
 
-        <!-- Dialog -->
+        <!-- Dialog. Three-row flex (header / body / footer); only the body
+             scrolls. Header + footer stay anchored so the close button and
+             the action buttons are always reachable regardless of content
+             length. The previous version put no scroller anywhere, so long
+             content (e.g. Codex CLI config) pushed both bars off-screen and
+             trapped the user. -->
         <div
           ref="dialogRef"
-          class="relative w-full max-w-[480px] rounded-xl bg-card border border-border shadow-xl"
+          class="relative w-full sm:max-w-[480px] sm:rounded-xl bg-card border border-border shadow-xl flex flex-col"
+          :style="{ maxHeight: '100dvh' }"
           role="dialog"
           aria-modal="true"
         >
-          <!-- Header -->
-          <div v-if="title" class="flex items-center justify-between px-6 pt-5 pb-0">
-            <h2 class="text-lg font-semibold text-fg">{{ title }}</h2>
+          <!-- Header — always visible. `shrink-0` keeps it pinned when the
+               body overflows. -->
+          <div v-if="title" class="shrink-0 flex items-center justify-between gap-3 px-5 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-border bg-card sticky top-0 z-10">
+            <h2 class="text-base sm:text-lg font-semibold text-fg truncate">{{ title }}</h2>
             <button
               type="button"
               aria-label="Close dialog"
-              class="rounded-md p-1.5 text-muted-fg hover:text-fg hover:bg-muted transition-colors"
+              class="-mr-1 rounded-md p-2 text-muted-fg hover:text-fg hover:bg-muted transition-colors shrink-0"
               @click="model = false"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -104,14 +125,41 @@ onBeforeUnmount(() => {
               </svg>
             </button>
           </div>
+          <!-- Lightweight close button when there's no title — without a
+               header bar above the body, there'd be no way out without a
+               keyboard. -->
+          <button
+            v-else
+            type="button"
+            aria-label="Close dialog"
+            class="absolute top-3 right-3 z-10 rounded-md p-2 text-muted-fg hover:text-fg hover:bg-muted transition-colors"
+            @click="model = false"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
 
-          <!-- Body -->
-          <div class="px-6 py-5">
+          <!-- Body — scrolls when content exceeds remaining height.
+               `min-h-0` is the magic that lets a flex child actually shrink
+               (without it, flex items refuse to be smaller than their
+               content). `-webkit-overflow-scrolling` keeps iOS Safari's
+               momentum scrolling smooth. -->
+          <div
+            class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 sm:px-6 py-4 sm:py-5"
+            style="-webkit-overflow-scrolling: touch"
+          >
             <slot />
           </div>
 
-          <!-- Footer -->
-          <div v-if="$slots.footer" class="flex items-center justify-end gap-3 px-6 pb-5 pt-0">
+          <!-- Footer — also pinned. Padding includes the iOS home-indicator
+               safe area so action buttons aren't covered on notched
+               devices. -->
+          <div
+            v-if="$slots.footer"
+            class="shrink-0 flex items-center justify-end gap-3 px-5 sm:px-6 pt-3 pb-4 sm:pb-5 border-t border-border bg-card sticky bottom-0 z-10"
+            style="padding-bottom: max(1rem, env(safe-area-inset-bottom))"
+          >
             <slot name="footer" />
           </div>
         </div>
