@@ -252,6 +252,8 @@ export default {
     loadFailed: '加载监控失败',
     spanLabel: '{n} 次检测 · 最近 {span}',
     noChecks: '暂无检测记录',
+    signInRequiredTitle: '登录后查看实时状态',
+    signInRequiredBody: '本服务的渠道健康数据需要登录后才能查看。登录后可查看实时可用率、延迟以及最近的检测记录。',
     legend: {
       up: '正常',
       degraded: '降级',

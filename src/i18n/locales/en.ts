@@ -259,6 +259,8 @@ export default {
     loadFailed: 'Failed to load monitors',
     spanLabel: '{n} checks · last {span}',
     noChecks: 'No checks yet',
+    signInRequiredTitle: 'Sign in to see live status',
+    signInRequiredBody: 'Channel health data is gated behind authentication on this server. Sign in to view live availability, latency, and recent check history.',
     legend: {
       up: 'Up',
       degraded: 'Degraded',

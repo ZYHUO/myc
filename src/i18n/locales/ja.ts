@@ -252,6 +252,8 @@ export default {
     loadFailed: '監視の読み込みに失敗しました',
     spanLabel: '{n} 回 · 直近 {span}',
     noChecks: 'チェック履歴なし',
+    signInRequiredTitle: 'サインインしてリアルタイム状態を表示',
+    signInRequiredBody: 'このサーバーではチャネル健全性データの閲覧にサインインが必要です。サインイン後、稼働率・レイテンシ・最近のチェック履歴を確認できます。',
     legend: {
       up: '正常',
       degraded: '低下',

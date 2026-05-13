@@ -60,7 +60,12 @@ const routes: RouteRecordRaw[] = [
     path: '/status',
     name: 'status',
     component: () => import('@/views/user/StatusView.vue'),
-    meta: { title: '服务状态' },
+    // Public so anonymous visitors arriving from the landing footer
+    // don't trigger the auth-redirect path (which would silently sign
+    // them in with a stale token). The page itself renders its own
+    // brand strip when not authed, and degrades gracefully when the
+    // /channel-monitors API call returns 401.
+    meta: { public: true, title: '服务状态' },
   },
   {
     path: '/subscriptions',

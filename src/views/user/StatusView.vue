@@ -1,24 +1,41 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { UiCard, UiBadge, UiSkeleton } from '@/components/ui'
+import { UiCard, UiBadge, UiSkeleton, UiButton } from '@/components/ui'
+import UiLanguageSwitcher from '@/components/ui/UiLanguageSwitcher.vue'
+import UiThemeSwitcher from '@/components/ui/UiThemeSwitcher.vue'
 import { getChannelMonitors } from '@/api/channels'
 import type { ChannelMonitor } from '@/api/channels'
+import { useAuthStore } from '@/stores/auth'
+import { httpStatus } from '@/api/_util'
 
 const monitors = ref<ChannelMonitor[]>([])
 const loading = ref(true)
+/** True when the most recent fetch returned 401 — we surface a clearer
+ *  "live data needs sign-in" state instead of the generic empty box. */
+const needsAuth = ref(false)
 const lastRefresh = ref<Date>(new Date())
 const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const { t, locale } = useI18n()
+const auth = useAuthStore()
+
+const isAuthed = computed(() => auth.isAuthenticated)
 
 async function fetchMonitors() {
   try {
-    // Pass the active `t` so the per-card "10 checks · last 6m" caption
-    // localizes correctly when the user flips the language switcher.
     monitors.value = await getChannelMonitors(t)
+    needsAuth.value = false
     lastRefresh.value = new Date()
-  } catch {
-    // Silent: keep prior data, refresh will retry on next interval.
+  } catch (err) {
+    if (httpStatus(err) === 401) {
+      needsAuth.value = true
+      // Stop polling — without a token, retrying every 30s is just noise.
+      if (refreshInterval.value) {
+        clearInterval(refreshInterval.value)
+        refreshInterval.value = null
+      }
+    }
+    // Other errors: keep prior data, the interval will retry.
   } finally {
     loading.value = false
   }
@@ -59,7 +76,31 @@ function formatRefreshTime(d: Date): string {
 </script>
 
 <template>
-  <div class="space-y-10">
+  <!-- When unauthenticated the App.vue layout decision drops the sidebar
+       and we render this view bare. Add a public brand strip + footer so
+       the page doesn't sit floating in the middle of an empty viewport. -->
+  <div :class="!isAuthed && 'min-h-screen flex flex-col bg-bg'">
+    <header
+      v-if="!isAuthed"
+      class="px-6 sm:px-10 py-5 flex items-center justify-between border-b border-border"
+    >
+      <RouterLink to="/" class="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
+        <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg text-sm font-display font-medium">
+          A
+        </div>
+        <span class="text-xl font-display text-fg tracking-tight">Amodel</span>
+      </RouterLink>
+      <div class="flex items-center gap-1">
+        <UiLanguageSwitcher />
+        <UiThemeSwitcher />
+        <RouterLink to="/login" class="ml-2 text-sm text-muted-fg hover:text-fg transition-colors">
+          {{ t('common.signIn') }}
+        </RouterLink>
+      </div>
+    </header>
+
+    <main :class="!isAuthed ? 'flex-1 mx-auto w-full max-w-[1200px] px-6 sm:px-10 py-10' : ''">
+      <div class="space-y-10">
     <!-- Header -->
     <div>
       <p class="text-[11px] uppercase tracking-[0.2em] text-muted-fg font-medium">{{ t('status.eyebrow') }}</p>
@@ -84,7 +125,22 @@ function formatRefreshTime(d: Date): string {
       </div>
     </div>
 
-    <!-- Empty -->
+    <!-- Sign-in required: sub2api gates /channel-monitors behind JWT auth.
+         Surface this honestly instead of an ambiguous "no data" box. -->
+    <div
+      v-else-if="needsAuth"
+      class="rounded-xl border border-dashed border-border bg-card p-8 text-center space-y-3"
+    >
+      <p class="text-base font-medium text-fg">{{ t('status.signInRequiredTitle') }}</p>
+      <p class="text-sm text-muted-fg max-w-md mx-auto leading-relaxed">{{ t('status.signInRequiredBody') }}</p>
+      <div class="pt-2">
+        <UiButton variant="primary" size="md" @click="$router.push('/login?redirect=/status')">
+          {{ t('common.signIn') }}
+        </UiButton>
+      </div>
+    </div>
+
+    <!-- Empty: backend reachable but no monitors configured. -->
     <div v-else-if="monitors.length === 0" class="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-fg">
       {{ t('status.empty') }}
     </div>
@@ -126,5 +182,9 @@ function formatRefreshTime(d: Date): string {
         </div>
       </UiCard>
     </div>
+      </div>
+    </main>
+
+    <footer v-if="!isAuthed" class="px-6 sm:px-10 py-6 text-xs text-muted-fg border-t border-border">© Amodel</footer>
   </div>
 </template>
